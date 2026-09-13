@@ -1,0 +1,62 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam usecase {
+    BackgroundColor LightCyan
+    BorderColor DarkSlateGray
+    ArrowColor DarkSlateGray
+}
+skinparam actor {
+    BackgroundColor LightBlue
+    BorderColor DarkBlue
+}
+
+' Definición de Actores
+actor "Operario" as operario
+actor "Técnico de Mantenimiento" as tecnico
+actor "Administrador / Gerente" as admin
+actor "Sistema (Automático)" as sistema <<Sistema Automático>>
+
+' Frontera del Sistema
+rectangle "Sistema de Gestión de Mantenimiento para PYMES" {
+    
+    ' Casos de Uso - Operario
+    usecase "Registrar incidencia / falla" as UC1
+    usecase "Consultar estado de máquina (Bloqueo)" as UC2
+    
+    ' Casos de Uso - Técnico
+    usecase "Consultar órdenes de trabajo" as UC3
+    usecase "Consultar historial de equipo" as UC4
+    usecase "Actualizar estado de orden" as UC5
+    
+    ' Casos de Uso - Administrador/Gerente
+    usecase "Gestionar maquinaria (CRUD)" as UC6
+    usecase "Gestionar inventario de repuestos" as UC7
+    usecase "Gestionar proveedores" as UC8
+    usecase "Visualizar Dashboard (KPIs)" as UC9
+    
+    ' Casos de Uso - Sistema Automático
+    usecase "Programar mantenimientos preventivos" as UC10
+    usecase "Generar alertas de atención e inventario" as UC11
+}
+
+' Relaciones - Operario
+operario --> UC1
+operario --> UC2
+
+' Relaciones - Técnico
+tecnico --> UC3
+tecnico --> UC4
+tecnico --> UC5
+
+' Relaciones - Administrador
+admin --> UC6
+admin --> UC7
+admin --> UC8
+admin --> UC9
+
+' Relaciones - Sistema
+sistema --> UC10
+sistema --> UC11
+
+@enduml
