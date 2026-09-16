@@ -1,6 +1,8 @@
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from .models import Repuesto, Equipo, OrdenRepuesto, OrdenTrabajo, HistorialEstadoEquipo, Alerta
+from django.contrib.auth.models import Group
+from .models import User
 
 
 @receiver(post_save, sender=Repuesto)
@@ -44,3 +46,31 @@ def registrar_cambio_estado(sender, instance, **kwargs):
                 )
         except Equipo.DoesNotExist:
             pass
+
+@receiver(post_save, sender=User)
+def asignar_grupo_por_rol(sender, instance, **kwargs):
+    """Asigna al usuario al grupo correspondiente según su rol_principal."""
+    
+    mapa_roles = {
+        'ADMIN': 'Administradores',
+        'TECNICO': 'Técnicos',
+        'OPERARIO': 'Operarios',
+    }
+    
+    nombre_grupo = mapa_roles.get(instance.rol_principal)
+    if not nombre_grupo:
+        return
+    
+    try:
+        grupo = Group.objects.get(name=nombre_grupo)
+    except Group.DoesNotExist:
+        return  # El grupo no existe todavía
+    
+    # Quitar al usuario de otros grupos de rol (por si cambió de rol)
+    grupos_rol = Group.objects.filter(
+        name__in=['Administradores', 'Técnicos', 'Operarios']
+    )
+    instance.groups.remove(*grupos_rol)
+    
+    # Añadirlo al grupo correspondiente
+    instance.groups.add(grupo)
