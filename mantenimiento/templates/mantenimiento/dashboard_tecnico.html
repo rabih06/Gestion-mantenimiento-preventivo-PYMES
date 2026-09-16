@@ -1,0 +1,27 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Panel Técnico{% endblock %}
+
+{% block content %}
+<h1 class="mb-4"><i class="bi bi-kanban"></i> Panel del Técnico</h1>
+
+<div class="alert alert-info">
+    Bienvenido, <strong>{{ user.get_full_name|default:user.username }}</strong>
+</div>
+
+<h4>Mis Órdenes Asignadas</h4>
+<ul class="list-group">
+    {% for orden in ordenes %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+                <strong>OT-{{ orden.id }}</strong> - {{ orden.equipo.codigo_interno }}
+                <span class="badge bg-secondary">{{ orden.get_estado_display }}</span>
+                <br>
+                <small class="text-muted">{{ orden.descripcion_trabajo|truncatechars:80 }}</small>
+            </div>
+            <span class="badge bg-primary">{{ orden.get_prioridad_display }}</span>
+        </li>
+    {% empty %}
+        <li class="list-group-item text-muted">No tienes órdenes asignadas.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

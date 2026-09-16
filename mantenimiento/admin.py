@@ -10,13 +10,23 @@ from .models import (
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
     list_display = ('username', 'email', 'first_name', 'last_name', 'rol_principal', 'departamento', 'is_staff')
-    list_filter = ('rol_principal', 'departamento', 'is_staff', 'is_superuser')
+    list_filter = ('rol_principal', 'departamento', 'is_staff', 'is_superuser', 'groups')
     search_fields = ('username', 'email', 'first_name', 'last_name')
+    
+    # Solo añadimos NUESTROS campos personalizados.
+    # 'groups' y 'user_permissions' ya vienen en UserAdmin.fieldsets por defecto.
     fieldsets = UserAdmin.fieldsets + (
-        ('Información adicional', {'fields': ('rol_principal', 'telefono', 'departamento')}),
+        ('Información adicional', {
+            'fields': ('rol_principal', 'telefono', 'departamento'),
+            'description': 'El grupo se asigna automáticamente según el rol principal. '
+                           'Los permisos individuales extra se gestionan en la sección "Permisos".'
+        }),
     )
+    
     add_fieldsets = UserAdmin.add_fieldsets + (
-        ('Información adicional', {'fields': ('rol_principal', 'telefono', 'departamento')}),
+        ('Información adicional', {
+            'fields': ('rol_principal', 'telefono', 'departamento')
+        }),
     )
 
 
