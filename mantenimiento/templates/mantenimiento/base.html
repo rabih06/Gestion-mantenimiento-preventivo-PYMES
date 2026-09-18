@@ -24,11 +24,29 @@
         </span>
         {% if user.is_authenticated %}
             <div class="d-flex align-items-center">
+
+                <!-- Badge de alertas (solo ADMIN y TECNICO) -->
+                {% if user.rol_principal == 'ADMIN' or user.rol_principal == 'TECNICO' %}
+                    <a href="{% url 'mantenimiento:lista_alertas' %}"
+                       class="btn btn-outline-light btn-sm me-3 position-relative"
+                       title="Ver alertas">
+                        <i class="bi bi-bell"></i>
+                        {% if alertas_count > 0 %}
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                                {{ alertas_count }}
+                            </span>
+                        {% endif %}
+                    </a>
+                {% endif %}
+
+                <!-- Nombre y rol del usuario -->
                 <span class="text-white me-3">
                     <i class="bi bi-person-circle"></i>
                     {{ user.get_full_name|default:user.username }}
                     <span class="badge bg-secondary ms-1">{{ user.get_rol_principal_display }}</span>
                 </span>
+
+                <!-- Botón de logout (POST por seguridad Django 5.x) -->
                 <form method="post" action="{% url 'logout' %}" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-light btn-sm">
@@ -42,22 +60,84 @@
     <!-- Contenido principal -->
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar (opcional, solo si el usuario está autenticado) -->
+            <!-- Sidebar (solo si el usuario está autenticado) -->
             {% if user.is_authenticated %}
             <div class="col-md-2 sidebar p-3">
                 <ul class="nav flex-column">
+
                     {% if user.rol_principal == 'ADMIN' %}
-                        <li class="nav-item"><a class="nav-link" href="{% url 'mantenimiento:dashboard_admin' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/admin/mantenimiento/equipo/"><i class="bi bi-cpu"></i> Equipos</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/admin/mantenimiento/repuesto/"><i class="bi bi-box-seam"></i> Repuestos</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/admin/mantenimiento/proveedor/"><i class="bi bi-truck"></i> Proveedores</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/admin/mantenimiento/ordentrabajo/"><i class="bi bi-clipboard-check"></i> Órdenes</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/admin/"><i class="bi bi-gear"></i> Admin Django</a></li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:dashboard_admin' %}">
+                                <i class="bi bi-speedometer2"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
+                                <i class="bi bi-bell"></i> Alertas
+                                {% if alertas_count > 0 %}
+                                    <span class="badge bg-danger ms-2">{{ alertas_count }}</span>
+                                {% endif %}
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/mantenimiento/equipo/">
+                                <i class="bi bi-cpu"></i> Equipos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/mantenimiento/repuesto/">
+                                <i class="bi bi-box-seam"></i> Repuestos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/mantenimiento/proveedor/">
+                                <i class="bi bi-truck"></i> Proveedores
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/mantenimiento/ordentrabajo/">
+                                <i class="bi bi-clipboard-check"></i> Órdenes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/">
+                                <i class="bi bi-gear"></i> Admin Django
+                            </a>
+                        </li>
+
                     {% elif user.rol_principal == 'TECNICO' %}
-                        <li class="nav-item"><a class="nav-link" href="{% url 'mantenimiento:dashboard_tecnico' %}"><i class="bi bi-kanban"></i> Mis Órdenes</a></li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:dashboard_tecnico' %}">
+                                <i class="bi bi-kanban"></i> Mis Órdenes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
+                                <i class="bi bi-bell"></i> Alertas
+                                {% if alertas_count > 0 %}
+                                    <span class="badge bg-danger ms-2">{{ alertas_count }}</span>
+                                {% endif %}
+                            </a>
+                        </li>
+
                     {% elif user.rol_principal == 'OPERARIO' %}
-                        <li class="nav-item"><a class="nav-link" href="{% url 'mantenimiento:dashboard_operario' %}"><i class="bi bi-house"></i> Inicio</a></li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:dashboard_operario' %}">
+                                <i class="bi bi-house"></i> Inicio
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_incidencias' %}">
+                                <i class="bi bi-list-check"></i> Mis Reportes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:reportar_incidencia' %}">
+                                <i class="bi bi-exclamation-triangle"></i> Reportar Falla
+                            </a>
+                        </li>
                     {% endif %}
+
                 </ul>
             </div>
             {% endif %}
