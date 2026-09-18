@@ -3,6 +3,7 @@ from django.dispatch import receiver
 from .models import Repuesto, Equipo, OrdenRepuesto, OrdenTrabajo, HistorialEstadoEquipo, Alerta
 from django.contrib.auth.models import Group
 from .models import User
+from .models import Incidencia
 
 
 @receiver(post_save, sender=Repuesto)
@@ -74,3 +75,13 @@ def asignar_grupo_por_rol(sender, instance, **kwargs):
     
     # Añadirlo al grupo correspondiente
     instance.groups.add(grupo)
+
+@receiver(post_save, sender=Incidencia)
+def crear_alerta_incidencia(sender, instance, created, **kwargs):
+    """Crea una alerta automática cuando se reporta una incidencia crítica o alta."""
+    if created and instance.prioridad in ['ALTA', 'CRITICA']:
+        Alerta.objects.create(
+            tipo='EQUIPO_CRITICO',
+            mensaje=f"Incidencia {instance.get_prioridad_display()}: {instance.equipo.codigo_interno} - {instance.descripcion_falla[:80]}",
+            equipo=instance.equipo,
+        )

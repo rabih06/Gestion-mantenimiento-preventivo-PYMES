@@ -1,0 +1,89 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Mis Incidencias{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-list-check"></i> Mis Incidencias Reportadas</h1>
+    <a href="{% url 'mantenimiento:reportar_incidencia' %}" class="btn btn-danger">
+        <i class="bi bi-plus-circle"></i> Reportar Nueva Falla
+    </a>
+</div>
+
+<!-- Resumen -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-start border-primary border-4">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Total Reportadas</h6>
+                <h3>{{ total }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-start border-warning border-4">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Pendientes</h6>
+                <h3>{{ pendientes }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-start border-success border-4">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Resueltas</h6>
+                <h3>{{ resueltas }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla -->
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Equipo</th>
+                        <th>Descripción</th>
+                        <th>Prioridad</th>
+                        <th>Estado</th>
+                        <th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inc in incidencias %}
+                        <tr>
+                            <td>#{{ inc.id }}</td>
+                            <td>
+                                <strong>{{ inc.equipo.codigo_interno }}</strong><br>
+                                <small class="text-muted">{{ inc.equipo.nombre }}</small>
+                            </td>
+                            <td>{{ inc.descripcion_falla|truncatechars:60 }}</td>
+                            <td>
+                                <span class="badge bg-{% if inc.prioridad == 'CRITICA' %}danger{% elif inc.prioridad == 'ALTA' %}warning{% elif inc.prioridad == 'MEDIA' %}info{% else %}secondary{% endif %}">
+                                    {{ inc.get_prioridad_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-{% if inc.estado == 'RESUELTA' %}success{% elif inc.estado == 'PENDIENTE' %}warning{% elif inc.estado == 'REVISION' %}info{% else %}secondary{% endif %}">
+                                    {{ inc.get_estado_display }}
+                                </span>
+                            </td>
+                            <td>{{ inc.fecha_reporte|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox" style="font-size: 2rem;"></i><br>
+                                No has reportado ninguna incidencia todavía.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
