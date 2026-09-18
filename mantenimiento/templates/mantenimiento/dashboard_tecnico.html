@@ -1,27 +1,237 @@
 {% extends 'mantenimiento/base.html' %}
-{% block title %}Panel Técnico{% endblock %}
+{% block title %}Panel Técnico - Kanban{% endblock %}
 
 {% block content %}
-<h1 class="mb-4"><i class="bi bi-kanban"></i> Panel del Técnico</h1>
+<h1 class="mb-4"><i class="bi bi-kanban"></i> Mis Órdenes de Trabajo</h1>
 
 <div class="alert alert-info">
     Bienvenido, <strong>{{ user.get_full_name|default:user.username }}</strong>
 </div>
 
-<h4>Mis Órdenes Asignadas</h4>
-<ul class="list-group">
-    {% for orden in ordenes %}
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-                <strong>OT-{{ orden.id }}</strong> - {{ orden.equipo.codigo_interno }}
-                <span class="badge bg-secondary">{{ orden.get_estado_display }}</span>
-                <br>
-                <small class="text-muted">{{ orden.descripcion_trabajo|truncatechars:80 }}</small>
+<!-- KPIs rápidos -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-start border-primary border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Total Asignadas</h6>
+                <h3 class="mb-0">{{ total_asignadas }}</h3>
             </div>
-            <span class="badge bg-primary">{{ orden.get_prioridad_display }}</span>
-        </li>
-    {% empty %}
-        <li class="list-group-item text-muted">No tienes órdenes asignadas.</li>
-    {% endfor %}
-</ul>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-warning border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Programadas</h6>
+                <h3 class="mb-0">{{ total_programadas }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-info border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">En Progreso</h6>
+                <h3 class="mb-0">{{ total_progreso }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-success border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Completadas</h6>
+                <h3 class="mb-0">{{ total_completadas }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tablero Kanban -->
+<div class="kanban-board">
+    <!-- COLUMNA: PROGRAMADAS -->
+    <div class="kanban-column">
+        <div class="kanban-column-header bg-warning text-dark">
+            <i class="bi bi-calendar-event"></i> Programadas
+            <span class="badge bg-dark">{{ programadas.count }}</span>
+        </div>
+        {% for orden in programadas %}
+            <div class="kanban-card border-warning">
+                <div class="d-flex justify-content-between align-items-start">
+                    <strong>OT-{{ orden.id }}</strong>
+                    <span class="badge bg-{% if orden.prioridad == 'CRITICA' %}danger{% elif orden.prioridad == 'ALTA' %}warning{% elif orden.prioridad == 'MEDIA' %}info{% else %}secondary{% endif %}">
+                        {{ orden.get_prioridad_display }}
+                    </span>
+                </div>
+                <div class="mt-2">
+                    <i class="bi bi-cpu"></i> <strong>{{ orden.equipo.codigo_interno }}</strong>
+                    <br>
+                    <small class="text-muted">{{ orden.equipo.nombre }}</small>
+                </div>
+                <div class="mt-2">
+                    <small><i class="bi bi-tag"></i> {{ orden.get_tipo_display }}</small>
+                </div>
+                <div class="mt-1">
+                    <small class="text-muted">
+                        <i class="bi bi-calendar"></i> {{ orden.fecha_programada|date:"d/m/Y H:i" }}
+                    </small>
+                </div>
+                <div class="mt-3 d-grid gap-2">
+                    <a href="{% url 'mantenimiento:detalle_orden' orden.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-eye"></i> Ver detalle
+                    </a>
+                    <a href="{% url 'mantenimiento:cambiar_estado_orden' orden.id 'PROGRESO' %}" 
+                       class="btn btn-sm btn-primary"
+                       onclick="return confirm('¿Iniciar la OT-{{ orden.id }}? El equipo quedará bloqueado.')">
+                        <i class="bi bi-play-fill"></i> Iniciar
+                    </a>
+                </div>
+            </div>
+        {% empty %}
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                <p>Sin órdenes programadas</p>
+            </div>
+        {% endfor %}
+    </div>
+
+    <!-- COLUMNA: EN PROGRESO -->
+    <div class="kanban-column">
+        <div class="kanban-column-header bg-primary text-white">
+            <i class="bi bi-gear"></i> En Progreso
+            <span class="badge bg-light text-dark">{{ en_progreso.count }}</span>
+        </div>
+        {% for orden in en_progreso %}
+            <div class="kanban-card border-primary">
+                <div class="d-flex justify-content-between align-items-start">
+                    <strong>OT-{{ orden.id }}</strong>
+                    <span class="badge bg-{% if orden.prioridad == 'CRITICA' %}danger{% elif orden.prioridad == 'ALTA' %}warning{% elif orden.prioridad == 'MEDIA' %}info{% else %}secondary{% endif %}">
+                        {{ orden.get_prioridad_display }}
+                    </span>
+                </div>
+                <div class="mt-2">
+                    <i class="bi bi-cpu"></i> <strong>{{ orden.equipo.codigo_interno }}</strong>
+                    <br>
+                    <small class="text-muted">{{ orden.equipo.nombre }}</small>
+                </div>
+                <div class="mt-2">
+                    <small><i class="bi bi-tag"></i> {{ orden.get_tipo_display }}</small>
+                </div>
+                <div class="mt-1">
+                    <small class="text-muted">
+                        <i class="bi bi-clock"></i> Inicio: {{ orden.fecha_inicio|date:"d/m/Y H:i"|default:"-" }}
+                    </small>
+                </div>
+                <div class="mt-3 d-grid gap-2">
+                    <a href="{% url 'mantenimiento:detalle_orden' orden.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-eye"></i> Ver detalle
+                    </a>
+                    <a href="{% url 'mantenimiento:cambiar_estado_orden' orden.id 'COMPLETADA' %}" 
+                       class="btn btn-sm btn-success"
+                       onclick="return confirm('¿Completar la OT-{{ orden.id }}? El equipo quedará disponible.')">
+                        <i class="bi bi-check-circle"></i> Completar
+                    </a>
+                </div>
+            </div>
+        {% empty %}
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                <p>Sin órdenes en progreso</p>
+            </div>
+        {% endfor %}
+    </div>
+
+    <!-- COLUMNA: COMPLETADAS (recientes) -->
+    <div class="kanban-column">
+        <div class="kanban-column-header bg-success text-white">
+            <i class="bi bi-check-circle"></i> Completadas
+            <span class="badge bg-light text-dark">{{ completadas.count }}</span>
+        </div>
+        {% for orden in completadas %}
+            <div class="kanban-card border-success opacity-75">
+                <div class="d-flex justify-content-between align-items-start">
+                    <strong>OT-{{ orden.id }}</strong>
+                    <i class="bi bi-check-circle-fill text-success"></i>
+                </div>
+                <div class="mt-2">
+                    <i class="bi bi-cpu"></i> {{ orden.equipo.codigo_interno }}
+                </div>
+                <div class="mt-1">
+                    <small class="text-muted">
+                        <i class="bi bi-calendar-check"></i> {{ orden.fecha_fin|date:"d/m/Y H:i"|default:"-" }}
+                    </small>
+                </div>
+                <div class="mt-1">
+                    <small class="text-muted">
+                        <i class="bi bi-hourglass"></i> {{ orden.duracion_horas }} h
+                    </small>
+                </div>
+            </div>
+        {% empty %}
+            <div class="text-center text-muted py-4">
+                <p>Sin completadas recientes</p>
+            </div>
+        {% endfor %}
+    </div>
+
+    <!-- COLUMNA: CANCELADAS (recientes) -->
+    <div class="kanban-column">
+        <div class="kanban-column-header bg-secondary text-white">
+            <i class="bi bi-x-circle"></i> Canceladas
+            <span class="badge bg-light text-dark">{{ canceladas.count }}</span>
+        </div>
+        {% for orden in canceladas %}
+            <div class="kanban-card border-secondary opacity-50">
+                <strong>OT-{{ orden.id }}</strong>
+                <div class="mt-1">
+                    <small>{{ orden.equipo.codigo_interno }}</small>
+                </div>
+            </div>
+        {% empty %}
+            <div class="text-center text-muted py-4">
+                <p>Sin canceladas</p>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Estilos Kanban -->
+<style>
+    .kanban-board {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    .kanban-column {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 0.75rem;
+        min-height: 500px;
+    }
+    .kanban-column-header {
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .kanban-card {
+        background: white;
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        border-left: 4px solid #0d6efd;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .kanban-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    @media (max-width: 992px) {
+        .kanban-board {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 {% endblock %}

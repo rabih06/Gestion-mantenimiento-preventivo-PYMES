@@ -8,38 +8,98 @@
     Bienvenido, <strong>{{ user.get_full_name|default:user.username }}</strong>
 </div>
 
-<button class="btn btn-danger btn-lg mb-4">
-    <i class="bi bi-exclamation-triangle"></i> REPORTAR FALLA
-</button>
-
-<div class="row">
-    <div class="col-md-6">
-        <h4>Mis Equipos Asignados</h4>
-        <ul class="list-group">
-            {% for eq in equipos %}
-                <li class="list-group-item">
-                    <strong>{{ eq.codigo_interno }}</strong> - {{ eq.nombre }}
-                    <span class="badge bg-{% if eq.estado_operativo == 'ACTIVO' %}success{% elif eq.estado_operativo == 'MANTENIMIENTO' %}warning{% else %}danger{% endif %}">
-                        {{ eq.get_estado_operativo_display }}
-                    </span>
-                </li>
-            {% empty %}
-                <li class="list-group-item text-muted">No tienes equipos asignados.</li>
-            {% endfor %}
-        </ul>
+<!-- Acciones rápidas -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <a href="{% url 'mantenimiento:reportar_incidencia' %}" class="text-decoration-none">
+            <div class="card bg-danger text-white shadow-sm h-100">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 3rem;"></i>
+                    <h3 class="mt-2">REPORTAR FALLA</h3>
+                    <p class="mb-0">Informa sobre un problema en una máquina</p>
+                </div>
+            </div>
+        </a>
     </div>
-    <div class="col-md-6">
-        <h4>Mis Incidencias Recientes</h4>
-        <ul class="list-group">
+    <div class="col-md-6 mb-3">
+        <a href="{% url 'mantenimiento:lista_incidencias' %}" class="text-decoration-none">
+            <div class="card bg-secondary text-white shadow-sm h-100">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-list-check" style="font-size: 3rem;"></i>
+                    <h3 class="mt-2">MIS REPORTES</h3>
+                    <p class="mb-0">Consulta el estado de tus incidencias</p>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Mis equipos -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-cpu"></i> Mis Equipos Asignados</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Estado</th>
+                        <th>Próximo Mantenimiento</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for eq in equipos %}
+                        <tr>
+                            <td><strong>{{ eq.codigo_interno }}</strong></td>
+                            <td>{{ eq.nombre }}</td>
+                            <td>
+                                <span class="badge bg-{% if eq.estado_operativo == 'ACTIVO' %}success{% elif eq.estado_operativo == 'MANTENIMIENTO' %}warning{% else %}danger{% endif %}">
+                                    {{ eq.get_estado_operativo_display }}
+                                </span>
+                            </td>
+                            <td>{{ eq.proximo_mantenimiento|date:"d/m/Y"|default:"No programado" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-3">
+                                No tienes equipos asignados.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Incidencias recientes -->
+<div class="card shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Mis Últimas Incidencias</h5>
+        <a href="{% url 'mantenimiento:lista_incidencias' %}" class="btn btn-sm btn-outline-primary">
+            Ver todas
+        </a>
+    </div>
+    <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
             {% for inc in incidencias %}
-                <li class="list-group-item">
-                    <strong>#{{ inc.id }}</strong> - {{ inc.equipo.codigo_interno }}
-                    <span class="badge bg-{% if inc.estado == 'RESUELTA' %}success{% elif inc.estado == 'PENDIENTE' %}warning{% else %}secondary{% endif %}">
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>#{{ inc.id }}</strong> - {{ inc.equipo.codigo_interno }}
+                        <br>
+                        <small class="text-muted">{{ inc.descripcion_falla|truncatechars:60 }}</small>
+                    </div>
+                    <span class="badge bg-{% if inc.estado == 'RESUELTA' %}success{% elif inc.estado == 'PENDIENTE' %}warning{% else %}info{% endif %}">
                         {{ inc.get_estado_display }}
                     </span>
                 </li>
             {% empty %}
-                <li class="list-group-item text-muted">No has reportado incidencias.</li>
+                <li class="list-group-item text-center text-muted py-4">
+                    No has reportado incidencias todavía.
+                </li>
             {% endfor %}
         </ul>
     </div>

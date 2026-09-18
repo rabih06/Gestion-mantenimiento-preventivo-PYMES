@@ -4,6 +4,12 @@ from django.contrib.auth import authenticate, login
 from django.contrib import messages
 from django.db.models import Count, Q
 from .models import Equipo, OrdenTrabajo, Alerta, Incidencia, Repuesto
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from .forms import IncidenciaForm
+from .models import Incidencia
+from django.utils import timezone
+
 
 
 def login_view(request):
@@ -110,15 +116,36 @@ def dashboard_admin(request):
 
 @login_required
 def dashboard_tecnico(request):
-    """Panel del técnico (Kanban de órdenes)."""
+    """Panel del técnico con Kanban de órdenes."""
     if request.user.rol_principal != 'TECNICO':
         return redirect('mantenimiento:redirigir_por_rol')
-    
-    # Órdenes asignadas al técnico
-    ordenes = request.user.ordenes_asignadas.all().order_by('-fecha_programada')
-    
+
+    # Solo las órdenes asignadas al técnico actual
+    ordenes = OrdenTrabajo.objects.filter(
+        tecnico=request.user
+    ).select_related('equipo', 'incidencia')
+
+    # Agrupar por estado para el Kanban
+    programadas = ordenes.filter(estado='PROGRAMADA').order_by('prioridad', 'fecha_programada')
+    en_progreso = ordenes.filter(estado='PROGRESO').order_by('fecha_programada')
+    completadas = ordenes.filter(estado='COMPLETADA').order_by('-fecha_fin')[:10]
+    canceladas = ordenes.filter(estado='CANCELADA').order_by('-fecha_programada')[:10]
+
+    # KPIs rápidos
+    total_asignadas = ordenes.count()
+    total_programadas = programadas.count()
+    total_progreso = en_progreso.count()
+    total_completadas = ordenes.filter(estado='COMPLETADA').count()
+
     context = {
-        'ordenes': ordenes,
+        'programadas': programadas,
+        'en_progreso': en_progreso,
+        'completadas': completadas,
+        'canceladas': canceladas,
+        'total_asignadas': total_asignadas,
+        'total_programadas': total_programadas,
+        'total_progreso': total_progreso,
+        'total_completadas': total_completadas,
     }
     return render(request, 'mantenimiento/dashboard_tecnico.html', context)
 
@@ -140,3 +167,135 @@ def dashboard_operario(request):
         'incidencias': incidencias,
     }
     return render(request, 'mantenimiento/dashboard_operario.html', context)
+
+@login_required
+def reportar_incidencia(request):
+    """Permite al operario reportar una falla en un equipo."""
+    if request.user.rol_principal != 'OPERARIO':
+        messages.error(request, 'Solo los operarios pueden reportar incidencias.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    if request.method == 'POST':
+        form = IncidenciaForm(request.POST)
+        if form.is_valid():
+            incidencia = form.save(commit=False)
+            incidencia.operario = request.user
+            incidencia.save()
+            messages.success(
+                request,
+                f'✅ Incidencia #{incidencia.id} reportada correctamente. '
+                f'El equipo técnico la revisará pronto.'
+            )
+            return redirect('mantenimiento:lista_incidencias')
+    else:
+        form = IncidenciaForm()
+
+    return render(request, 'mantenimiento/reportar_incidencia.html', {'form': form})
+
+
+@login_required
+def lista_incidencias(request):
+    """Muestra las incidencias reportadas por el operario actual."""
+    if request.user.rol_principal != 'OPERARIO':
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    incidencias = Incidencia.objects.filter(
+        operario=request.user
+    ).order_by('-fecha_reporte')
+
+    context = {
+        'incidencias': incidencias,
+        'total': incidencias.count(),
+        'pendientes': incidencias.filter(estado='PENDIENTE').count(),
+        'resueltas': incidencias.filter(estado='RESUELTA').count(),
+    }
+    return render(request, 'mantenimiento/lista_incidencias.html', context)
+
+@login_required
+def detalle_orden(request, orden_id):
+    """Vista de detalle de una orden de trabajo."""
+    if request.user.rol_principal not in ['TECNICO', 'ADMIN']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    orden = get_object_or_404(OrdenTrabajo, id=orden_id)
+
+    # Los técnicos solo pueden ver sus propias órdenes
+    if request.user.rol_principal == 'TECNICO' and orden.tecnico != request.user:
+        messages.error(request, 'No tienes permiso para ver esta orden.')
+        return redirect('mantenimiento:dashboard_tecnico')
+
+    # Repuestos disponibles para añadir
+    repuestos_disponibles = Repuesto.objects.filter(cantidad_actual__gt=0)
+    repuestos_usados = orden.repuestos_usados.select_related('repuesto')
+
+    context = {
+        'orden': orden,
+        'repuestos_disponibles': repuestos_disponibles,
+        'repuestos_usados': repuestos_usados,
+    }
+    return render(request, 'mantenimiento/detalle_orden.html', context)
+
+
+@login_required
+def cambiar_estado_orden(request, orden_id, nuevo_estado):
+    """Cambia el estado de una orden y aplica la lógica de negocio asociada."""
+    if request.user.rol_principal not in ['TECNICO', 'ADMIN']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    orden = get_object_or_404(OrdenTrabajo, id=orden_id)
+
+    # Los técnicos solo pueden cambiar sus propias órdenes
+    if request.user.rol_principal == 'TECNICO' and orden.tecnico != request.user:
+        messages.error(request, 'No tienes permiso para modificar esta orden.')
+        return redirect('mantenimiento:dashboard_tecnico')
+
+    estados_validos = ['PROGRAMADA', 'PROGRESO', 'COMPLETADA', 'CANCELADA']
+    if nuevo_estado not in estados_validos:
+        messages.error(request, 'Estado no válido.')
+        return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+
+    from django.utils import timezone
+    ahora = timezone.now()
+    equipo = orden.equipo
+
+    # =====================================================
+    # LÓGICA DE NEGOCIO SEGÚN EL NUEVO ESTADO
+    # =====================================================
+    if nuevo_estado == 'PROGRESO':
+        # Iniciar trabajo
+        orden.estado = 'PROGRESO'
+        orden.fecha_inicio = ahora
+        equipo.estado_operativo = 'MANTENIMIENTO'
+        equipo.bloqueado = True
+        messages.success(request, f'OT-{orden.id} iniciada. Equipo bloqueado en mantenimiento.')
+
+    elif nuevo_estado == 'COMPLETADA':
+        # Completar trabajo
+        orden.estado = 'COMPLETADA'
+        orden.fecha_fin = ahora
+        # Calcular duración
+        if orden.fecha_inicio:
+            delta = ahora - orden.fecha_inicio
+            orden.duracion_horas = round(delta.total_seconds() / 3600, 2)
+        # Actualizar equipo
+        equipo.estado_operativo = 'ACTIVO'
+        equipo.bloqueado = False
+        equipo.ultimo_mantenimiento = ahora
+        # Calcular próximo mantenimiento
+        if equipo.intervalo_mantenimiento_dias > 0:
+            equipo.proximo_mantenimiento = ahora + timezone.timedelta(
+                days=equipo.intervalo_mantenimiento_dias
+            )
+        messages.success(request, f'OT-{orden.id} completada. Equipo disponible.')
+
+    elif nuevo_estado == 'CANCELADA':
+        # Cancelar
+        orden.estado = 'CANCELADA'
+        equipo.estado_operativo = 'ACTIVO'
+        equipo.bloqueado = False
+        messages.warning(request, f'OT-{orden.id} cancelada.')
+
+    orden.save()
+    equipo.save()
+
+    return redirect('mantenimiento:dashboard_tecnico')
