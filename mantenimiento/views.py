@@ -299,3 +299,84 @@ def cambiar_estado_orden(request, orden_id, nuevo_estado):
     equipo.save()
 
     return redirect('mantenimiento:dashboard_tecnico')
+
+from .models import Alerta
+
+
+@login_required
+def lista_alertas(request):
+    """Lista todas las alertas con filtros."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver las alertas.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    alertas = Alerta.objects.select_related('repuesto', 'equipo', 'plan').order_by('-created_at')
+
+    # Filtros por query params
+    tipo_filtro = request.GET.get('tipo', '')
+    estado_filtro = request.GET.get('estado', '')
+
+    if tipo_filtro:
+        alertas = alertas.filter(tipo=tipo_filtro)
+
+    if estado_filtro == 'leidas':
+        alertas = alertas.filter(leida=True)
+    elif estado_filtro == 'no_leidas':
+        alertas = alertas.filter(leida=False)
+
+    # Contadores para las tarjetas de resumen
+    total_alertas = Alerta.objects.count()
+    no_leidas = Alerta.objects.filter(leida=False).count()
+    leidas = Alerta.objects.filter(leida=True).count()
+
+    context = {
+        'alertas': alertas,
+        'tipo_filtro': tipo_filtro,
+        'estado_filtro': estado_filtro,
+        'tipos_alerta': Alerta.TIPO_CHOICES,
+        'total_alertas': total_alertas,
+        'no_leidas': no_leidas,
+        'leidas': leidas,
+    }
+    return render(request, 'mantenimiento/lista_alertas.html', context)
+
+
+@login_required
+def marcar_alerta_leida(request, alerta_id):
+    """Marca una alerta como leída."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    alerta = get_object_or_404(Alerta, id=alerta_id)
+    alerta.leida = True
+    alerta.save()
+    messages.success(request, 'Alerta marcada como leída.')
+
+    # Volver a donde estaba el usuario
+    return redirect(request.META.get('HTTP_REFERER', 'mantenimiento:lista_alertas'))
+
+
+@login_required
+def marcar_todas_leidas(request):
+    """Marca todas las alertas como leídas."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    if request.method == 'POST':
+        cantidad = Alerta.objects.filter(leida=False).update(leida=True)
+        messages.success(request, f'{cantidad} alertas marcadas como leídas.')
+
+    return redirect('mantenimiento:lista_alertas')
+
+
+@login_required
+def eliminar_alerta(request, alerta_id):
+    """Elimina una alerta."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    alerta = get_object_or_404(Alerta, id=alerta_id)
+    alerta.delete()
+    messages.success(request, 'Alerta eliminada.')
+
+    return redirect('mantenimiento:lista_alertas')

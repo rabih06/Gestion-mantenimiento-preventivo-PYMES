@@ -15,4 +15,9 @@ urlpatterns = [
     #Ordenes de trabajo (Técnico)
     path('ordenes/<int:orden_id>/', views.detalle_orden, name='detalle_orden'),
     path('ordenes/<int:orden_id>/cambiar/<str:nuevo_estado>/', views.cambiar_estado_orden, name='cambiar_estado_orden'),
+    #Alertas automatizadas
+    path('alertas/', views.lista_alertas, name='lista_alertas'),
+    path('alertas/<int:alerta_id>/leer/', views.marcar_alerta_leida, name='marcar_alerta_leida'),
+    path('alertas/marcar-todas/', views.marcar_todas_leidas, name='marcar_todas_leidas'),
+    path('alertas/<int:alerta_id>/eliminar/', views.eliminar_alerta, name='eliminar_alerta'),
 ]
