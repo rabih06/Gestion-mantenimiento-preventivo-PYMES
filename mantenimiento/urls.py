@@ -20,4 +20,10 @@ urlpatterns = [
     path('alertas/<int:alerta_id>/leer/', views.marcar_alerta_leida, name='marcar_alerta_leida'),
     path('alertas/marcar-todas/', views.marcar_todas_leidas, name='marcar_todas_leidas'),
     path('alertas/<int:alerta_id>/eliminar/', views.eliminar_alerta, name='eliminar_alerta'),
+    # Equipos
+    path('equipos/', views.lista_equipos, name='lista_equipos'),
+    path('equipos/crear/', views.crear_equipo, name='crear_equipo'),
+    path('equipos/<int:equipo_id>/', views.detalle_equipo, name='detalle_equipo'),
+    path('equipos/<int:equipo_id>/editar/', views.editar_equipo, name='editar_equipo'),
+    path('equipos/<int:equipo_id>/eliminar/', views.eliminar_equipo, name='eliminar_equipo'),
 ]

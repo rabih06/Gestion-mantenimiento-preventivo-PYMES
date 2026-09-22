@@ -3,12 +3,15 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
 from django.db.models import Count, Q
-from .models import Equipo, OrdenTrabajo, Alerta, Incidencia, Repuesto
+from .models import Equipo, OrdenTrabajo, Alerta, Incidencia, Repuesto, CategoriaEquipo
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from .forms import IncidenciaForm
 from .models import Incidencia
 from django.utils import timezone
+from .forms import EquipoForm
+from django.core.paginator import Paginator
+from .forms import IncidenciaForm, EquipoForm, AtributoEquipoFormSet
 
 
 
@@ -380,3 +383,196 @@ def eliminar_alerta(request, alerta_id):
     messages.success(request, 'Alerta eliminada.')
 
     return redirect('mantenimiento:lista_alertas')
+
+# =====================================================
+# CRUD DE EQUIPOS
+# =====================================================
+
+@login_required
+def lista_equipos(request):
+    """Lista de equipos con búsqueda, filtros y paginación."""
+    equipos = Equipo.objects.select_related('categoria', 'responsable').all()
+
+    # ✅ FILTRO POR ROL: Operario solo ve sus equipos o los sin responsable
+    if request.user.rol_principal == 'OPERARIO':
+        equipos = equipos.filter(
+            Q(responsable=request.user) | Q(responsable__isnull=True)
+        )
+    # ADMIN y TECNICO ven todos
+
+    # ... el resto de la función (búsqueda, filtros, paginación) queda igual
+
+    # Búsqueda por texto
+    q = request.GET.get('q', '').strip()
+    if q:
+        equipos = equipos.filter(
+            Q(codigo_interno__icontains=q) |
+            Q(nombre__icontains=q) |
+            Q(numero_serie__icontains=q) |
+            Q(marca__icontains=q)
+        )
+
+    # Filtros
+    estado_filtro = request.GET.get('estado', '')
+    if estado_filtro:
+        equipos = equipos.filter(estado_operativo=estado_filtro)
+
+    categoria_filtro = request.GET.get('categoria', '')
+    if categoria_filtro:
+        equipos = equipos.filter(categoria_id=categoria_filtro)
+
+    bloqueado_filtro = request.GET.get('bloqueado', '')
+    if bloqueado_filtro == 'si':
+        equipos = equipos.filter(bloqueado=True)
+    elif bloqueado_filtro == 'no':
+        equipos = equipos.filter(bloqueado=False)
+
+    # Ordenamiento
+    orden = request.GET.get('orden', 'codigo_interno')
+    equipos = equipos.order_by(orden)
+
+    # Paginación
+    paginator = Paginator(equipos, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Mantener los filtros al cambiar de página
+    query_params = request.GET.copy()
+    if 'page' in query_params:
+        del query_params['page']
+
+    context = {
+        'page_obj': page_obj,
+        'q': q,
+        'estado_filtro': estado_filtro,
+        'categoria_filtro': categoria_filtro,
+        'bloqueado_filtro': bloqueado_filtro,
+        'orden': orden,
+        'estados': Equipo.ESTADO_CHOICES,
+        'categorias': CategoriaEquipo.objects.all(),
+        'query_params': query_params.urlencode(),
+        'total_equipos': equipos.count(),
+    }
+    return render(request, 'mantenimiento/equipos/lista_equipos.html', context)
+
+
+@login_required
+def detalle_equipo(request, equipo_id):
+    """Vista detallada de un equipo con su historial completo."""
+    equipo = get_object_or_404(Equipo, id=equipo_id)
+
+    # ✅ VALIDACIÓN: Operario solo puede ver equipos suyos o sin responsable
+    if request.user.rol_principal == 'OPERARIO':
+        if equipo.responsable and equipo.responsable != request.user:
+            messages.error(
+                request,
+                'No tienes permiso para ver este equipo. '
+                'Solo puedes consultar los equipos bajo tu responsabilidad.'
+            )
+            return redirect('mantenimiento:lista_equipos')
+
+    # Historiales relacionados
+    ordenes = equipo.ordenes.select_related('tecnico').order_by('-fecha_programada')[:10]
+    incidencias = equipo.incidencias.select_related('operario').order_by('-fecha_reporte')[:10]
+    planes = equipo.planes.filter(is_active=True)
+    atributos = equipo.atributos.all()
+    historial_estados = equipo.historial_estados.order_by('-fecha_cambio')[:10]
+    alertas = equipo.alertas.filter(leida=False).order_by('-created_at')[:5]
+
+    context = {
+        'equipo': equipo,
+        'ordenes': ordenes,
+        'incidencias': incidencias,
+        'planes': planes,
+        'atributos': atributos,
+        'historial_estados': historial_estados,
+        'alertas': alertas,
+    }
+    return render(request, 'mantenimiento/equipos/detalle_equipo.html', context)
+
+
+@login_required
+def crear_equipo(request):
+    """Crear un nuevo equipo con sus atributos técnicos (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden crear equipos.')
+        return redirect('mantenimiento:lista_equipos')
+
+    if request.method == 'POST':
+        form = EquipoForm(request.POST)
+        formset = AtributoEquipoFormSet(request.POST)
+        
+        if form.is_valid() and formset.is_valid():
+            equipo = form.save()
+            formset.instance = equipo
+            formset.save()
+            messages.success(request, f'✅ Equipo "{equipo.nombre}" creado correctamente.')
+            return redirect('mantenimiento:detalle_equipo', equipo_id=equipo.id)
+    else:
+        form = EquipoForm()
+        formset = AtributoEquipoFormSet()
+
+    return render(request, 'mantenimiento/equipos/form_equipo.html', {
+        'form': form,
+        'formset': formset,
+        'titulo': 'Crear Nuevo Equipo',
+        'accion': 'Crear',
+    })
+
+
+@login_required
+def editar_equipo(request, equipo_id):
+    """Editar un equipo existente (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden editar equipos.')
+        return redirect('mantenimiento:lista_equipos')
+
+    equipo = get_object_or_404(Equipo, id=equipo_id)
+
+    if request.method == 'POST':
+        form = EquipoForm(request.POST, instance=equipo)
+        formset = AtributoEquipoFormSet(request.POST, instance=equipo)
+        
+        if form.is_valid() and formset.is_valid():
+            equipo = form.save()
+            formset.save()
+            messages.success(request, f'✅ Equipo "{equipo.nombre}" actualizado.')
+            return redirect('mantenimiento:detalle_equipo', equipo_id=equipo.id)
+    else:
+        form = EquipoForm(instance=equipo)
+        formset = AtributoEquipoFormSet(instance=equipo)
+
+    return render(request, 'mantenimiento/equipos/form_equipo.html', {
+        'form': form,
+        'formset': formset,
+        'equipo': equipo,
+        'titulo': f'Editar: {equipo.nombre}',
+        'accion': 'Guardar Cambios',
+    })
+
+
+@login_required
+def eliminar_equipo(request, equipo_id):
+    """Eliminar un equipo (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden eliminar equipos.')
+        return redirect('mantenimiento:lista_equipos')
+
+    equipo = get_object_or_404(Equipo, id=equipo_id)
+
+    # Validar que no tenga órdenes activas
+    ordenes_activas = equipo.ordenes.filter(estado__in=['PROGRAMADA', 'PROGRESO']).count()
+    if ordenes_activas > 0:
+        messages.error(
+            request,
+            f'No se puede eliminar: el equipo tiene {ordenes_activas} orden(es) activa(s).'
+        )
+        return redirect('mantenimiento:detalle_equipo', equipo_id=equipo.id)
+
+    if request.method == 'POST':
+        nombre = equipo.nombre
+        equipo.delete()
+        messages.success(request, f'Equipo "{nombre}" eliminado correctamente.')
+        return redirect('mantenimiento:lista_equipos')
+
+    return render(request, 'mantenimiento/equipos/confirmar_eliminar.html', {'equipo': equipo})
