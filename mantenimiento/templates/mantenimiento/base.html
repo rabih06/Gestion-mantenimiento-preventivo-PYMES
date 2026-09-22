@@ -65,6 +65,9 @@
             <div class="col-md-2 sidebar p-3">
                 <ul class="nav flex-column">
 
+                    {# ============================================ #}
+                    {# SIDEBAR DEL ADMINISTRADOR                     #}
+                    {# ============================================ #}
                     {% if user.rol_principal == 'ADMIN' %}
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:dashboard_admin' %}">
@@ -80,7 +83,7 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/mantenimiento/equipo/">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">
                                 <i class="bi bi-cpu"></i> Equipos
                             </a>
                         </li>
@@ -105,6 +108,9 @@
                             </a>
                         </li>
 
+                    {# ============================================ #}
+                    {# SIDEBAR DEL TÉCNICO                           #}
+                    {# ============================================ #}
                     {% elif user.rol_principal == 'TECNICO' %}
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:dashboard_tecnico' %}">
@@ -119,11 +125,24 @@
                                 {% endif %}
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">
+                                <i class="bi bi-cpu"></i> Equipos
+                            </a>
+                        </li>
 
+                    {# ============================================ #}
+                    {# SIDEBAR DEL OPERARIO                          #}
+                    {# ============================================ #}
                     {% elif user.rol_principal == 'OPERARIO' %}
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:dashboard_operario' %}">
                                 <i class="bi bi-house"></i> Inicio
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:reportar_incidencia' %}">
+                                <i class="bi bi-exclamation-triangle"></i> Reportar Falla
                             </a>
                         </li>
                         <li class="nav-item">
@@ -132,8 +151,8 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'mantenimiento:reportar_incidencia' %}">
-                                <i class="bi bi-exclamation-triangle"></i> Reportar Falla
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">
+                                <i class="bi bi-cpu"></i> Equipos
                             </a>
                         </li>
                     {% endif %}

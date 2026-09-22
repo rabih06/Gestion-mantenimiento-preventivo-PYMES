@@ -1,0 +1,163 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-cpu"></i> {{ titulo }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="row">
+                        <!-- Identificación -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.codigo_interno.label }}</label>
+                            {{ form.codigo_interno }}
+                            <small class="text-muted">{{ form.codigo_interno.help_text }}</small>
+                            {% if form.codigo_interno.errors %}
+                                <div class="text-danger small">{{ form.codigo_interno.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.nombre.label }}</label>
+                            {{ form.nombre }}
+                            {% if form.nombre.errors %}
+                                <div class="text-danger small">{{ form.nombre.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Clasificación -->
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Categoría</label>
+                            {{ form.categoria }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Marca</label>
+                            {{ form.marca }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Modelo</label>
+                            {{ form.modelo }}
+                        </div>
+
+                        <!-- Serie y fechas -->
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">N° Serie</label>
+                            {{ form.numero_serie }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Fecha de Compra</label>
+                            {{ form.fecha_compra }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Fecha de Instalación</label>
+                            {{ form.fecha_instalacion }}
+                        </div>
+
+                        <!-- Mantenimiento -->
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">{{ form.intervalo_mantenimiento_dias.label }}</label>
+                            {{ form.intervalo_mantenimiento_dias }}
+                            {% if form.intervalo_mantenimiento_dias.errors %}
+                                <div class="text-danger small">{{ form.intervalo_mantenimiento_dias.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">{{ form.tipo_intervalo.label }}</label>
+                            {{ form.tipo_intervalo }}
+                            <small class="text-muted">{{ form.tipo_intervalo.help_text }}</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Estado Operativo</label>
+                            {{ form.estado_operativo }}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Responsable</label>
+                            {{ form.responsable }}
+                        </div>
+
+                        <!-- Bloqueado -->
+                        <div class="col-12 mb-3">
+                            <div class="form-check">
+                                {{ form.bloqueado }}
+                                <label class="form-check-label" for="{{ form.bloqueado.id_for_label }}">
+                                    {{ form.bloqueado.label }}
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ============================================== -->
+                    <!-- ATRIBUTOS TÉCNICOS (formset)                    -->
+                    <!-- ============================================== -->
+                    <hr class="my-4">
+                    <h5><i class="bi bi-gear"></i> Atributos Técnicos <small class="text-muted">(opcional)</small></h5>
+                    <p class="text-muted small">
+                        Ej: Voltaje = 220 V, RPM = 3000, Kilometraje = 120000 km, etc.
+                    </p>
+
+                    <!-- ✅ MANAGEMENT FORM (OBLIGATORIO) -->
+                    {{ formset.management_form }}
+
+                    {% if formset.non_form_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in formset.non_form_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <div id="formset-container">
+                        {% for atr_form in formset %}
+                            <div class="row g-2 mb-2 align-items-center formset-row">
+                                {% for hidden in atr_form.hidden_fields %}
+                                    {{ hidden }}
+                                {% endfor %}
+
+                                <div class="col-md-4">
+                                    {{ atr_form.nombre }}
+                                    {% if atr_form.nombre.errors %}
+                                        <div class="text-danger small">{{ atr_form.nombre.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-3">
+                                    {{ atr_form.valor }}
+                                </div>
+                                <div class="col-md-3">
+                                    {{ atr_form.unidad }}
+                                </div>
+                                <div class="col-md-2 text-end">
+                                    {% if atr_form.DELETE %}
+                                        <div class="form-check">
+                                            {{ atr_form.DELETE }}
+                                            <label class="form-check-label small text-danger">Eliminar</label>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Botones -->
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'mantenimiento:lista_equipos' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> {{ accion }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

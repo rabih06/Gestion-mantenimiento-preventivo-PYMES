@@ -1,0 +1,224 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}{{ equipo.codigo_interno }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="bi bi-cpu"></i> {{ equipo.nombre }}</h1>
+        <p class="text-muted mb-0">
+            Código: <strong>{{ equipo.codigo_interno }}</strong>
+            {% if equipo.bloqueado %}
+                <span class="badge bg-warning text-dark ms-2"><i class="bi bi-lock"></i> Bloqueado</span>
+            {% endif %}
+            <span class="badge bg-{% if equipo.estado_operativo == 'ACTIVO' %}success{% elif equipo.estado_operativo == 'MANTENIMIENTO' %}warning{% else %}danger{% endif %} ms-2">
+                {{ equipo.get_estado_operativo_display }}
+            </span>
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mantenimiento:lista_equipos' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        {% if user.rol_principal == 'ADMIN' %}
+            <a href="{% url 'mantenimiento:editar_equipo' equipo.id %}" class="btn btn-warning">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+        {% endif %}
+        {% if user.rol_principal == 'ADMIN' %}
+            <a href="{% url 'mantenimiento:eliminar_equipo' equipo.id %}" class="btn btn-danger">
+                <i class="bi bi-trash"></i> Eliminar
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <!-- Columna izquierda: ficha técnica -->
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Ficha Técnica</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Categoría</span>
+                    <strong>{{ equipo.categoria.nombre|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Marca</span>
+                    <strong>{{ equipo.marca|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Modelo</span>
+                    <strong>{{ equipo.modelo|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">N° Serie</span>
+                    <strong>{{ equipo.numero_serie|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Fecha de Compra</span>
+                    <strong>{{ equipo.fecha_compra|date:"d/m/Y"|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Instalación</span>
+                    <strong>{{ equipo.fecha_instalacion|date:"d/m/Y"|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Intervalo Mant.</span>
+                    <strong>{{ equipo.intervalo_mantenimiento_dias }} días</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Responsable</span>
+                    <strong>{{ equipo.responsable|default:"-" }}</strong>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Fechas de mantenimiento -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Mantenimiento</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <small class="text-muted">Último mantenimiento</small>
+                    <div><strong>{{ equipo.ultimo_mantenimiento|date:"d/m/Y H:i"|default:"Nunca" }}</strong></div>
+                </li>
+                <li class="list-group-item">
+                    <small class="text-muted">Próximo mantenimiento</small>
+                    <div><strong>{{ equipo.proximo_mantenimiento|date:"d/m/Y"|default:"No programado" }}</strong></div>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Atributos técnicos -->
+        {% if atributos %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-gear"></i> Atributos Técnicos</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for attr in atributos %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">{{ attr.nombre }}</span>
+                        <strong>{{ attr.valor }} {{ attr.unidad|default:"" }}</strong>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Columna derecha: historial -->
+    <div class="col-md-8">
+        <!-- Alertas activas -->
+        {% if alertas %}
+        <div class="card shadow-sm mb-4 border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Alertas Activas</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for alerta in alertas %}
+                    <li class="list-group-item text-break">
+                        <span class="badge bg-warning me-2">{{ alerta.get_tipo_display }}</span>
+                        {{ alerta.mensaje }}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <!-- Órdenes de trabajo -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Órdenes de Trabajo</h5>
+                <span class="badge bg-secondary">{{ ordenes|length }} recientes</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>OT</th>
+                            <th>Tipo</th>
+                            <th>Técnico</th>
+                            <th>Estado</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for o in ordenes %}
+                            <tr>
+                                <td><a href="{% url 'mantenimiento:detalle_orden' o.id %}">OT-{{ o.id }}</a></td>
+                                <td>{{ o.get_tipo_display }}</td>
+                                <td>{{ o.tecnico.get_full_name|default:"-" }}</td>
+                                <td>
+                                    <span class="badge bg-{% if o.estado == 'COMPLETADA' %}success{% elif o.estado == 'PROGRESO' %}primary{% elif o.estado == 'CANCELADA' %}secondary{% else %}warning{% endif %}">
+                                        {{ o.get_estado_display }}
+                                    </span>
+                                </td>
+                                <td>{{ o.fecha_programada|date:"d/m/Y" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="5" class="text-center text-muted py-3">Sin órdenes registradas.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Incidencias -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-exclamation-circle"></i> Incidencias Reportadas</h5>
+                <span class="badge bg-secondary">{{ incidencias|length }} recientes</span>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for inc in incidencias %}
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <div class="text-break flex-grow-1">
+                                <span class="badge bg-{% if inc.prioridad == 'CRITICA' %}danger{% elif inc.prioridad == 'ALTA' %}warning{% else %}info{% endif %} me-2">
+                                    {{ inc.get_prioridad_display }}
+                                </span>
+                                {{ inc.descripcion_falla }}
+                                <br>
+                                <small class="text-muted">
+                                    Por {{ inc.operario.get_full_name|default:inc.operario.username }}
+                                    el {{ inc.fecha_reporte|date:"d/m/Y H:i" }}
+                                </small>
+                            </div>
+                            <span class="badge bg-{% if inc.estado == 'RESUELTA' %}success{% elif inc.estado == 'PENDIENTE' %}warning{% else %}info{% endif %} ms-2 align-self-start">
+                                {{ inc.get_estado_display }}
+                            </span>
+                        </div>
+                    </li>
+                {% empty %}
+                    <li class="list-group-item text-center text-muted py-3">Sin incidencias reportadas.</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <!-- Planes de mantenimiento -->
+        {% if planes %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-calendar-event"></i> Planes de Mantenimiento</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for plan in planes %}
+                    <li class="list-group-item">
+                        <strong>{{ plan.nombre }}</strong>
+                        <br>
+                        <small class="text-muted">
+                            Cada {{ plan.frecuencia_dias }} días
+                            {% if plan.proxima_ejecucion %} | Próxima: {{ plan.proxima_ejecucion|date:"d/m/Y" }}{% endif %}
+                        </small>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

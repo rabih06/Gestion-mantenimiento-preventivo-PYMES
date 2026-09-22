@@ -1,0 +1,186 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Equipos{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-cpu"></i> Equipos Registrados</h1>
+    {% if user.rol_principal == 'ADMIN' %}
+        <a href="{% url 'mantenimiento:crear_equipo' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Nuevo Equipo
+        </a>
+    {% endif %}
+</div>
+
+<!-- Filtros y búsqueda -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Buscar</label>
+                <input type="text" name="q" class="form-control" 
+                       placeholder="Código, nombre, serie, marca..." value="{{ q }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Estado</label>
+                <select name="estado" class="form-select">
+                    <option value="">Todos</option>
+                    {% for valor, etiqueta in estados %}
+                        <option value="{{ valor }}" {% if estado_filtro == valor %}selected{% endif %}>
+                            {{ etiqueta }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Categoría</label>
+                <select name="categoria" class="form-select">
+                    <option value="">Todas</option>
+                    {% for cat in categorias %}
+                        <option value="{{ cat.id }}" {% if categoria_filtro == cat.id|stringformat:"s" %}selected{% endif %}>
+                            {{ cat.nombre }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Bloqueado</label>
+                <select name="bloqueado" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="si" {% if bloqueado_filtro == 'si' %}selected{% endif %}>Sí</option>
+                    <option value="no" {% if bloqueado_filtro == 'no' %}selected{% endif %}>No</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-fill">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+                <a href="{% url 'mantenimiento:lista_equipos' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Contador -->
+<p class="text-muted">
+    <i class="bi bi-info-circle"></i> Mostrando {{ page_obj.start_index }}-{{ page_obj.end_index }} de {{ total_equipos }} equipo(s)
+</p>
+
+<!-- Tabla -->
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Código</th>
+                    <th>Nombre</th>
+                    <th>Categoría</th>
+                    <th>Marca / Modelo</th>
+                    <th>Estado</th>
+                    <th>Próximo Mant.</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for eq in page_obj %}
+                    <tr>
+                        <td>
+                            <strong>{{ eq.codigo_interno }}</strong>
+                            {% if eq.bloqueado %}
+                                <i class="bi bi-lock-fill text-warning" title="Bloqueado"></i>
+                            {% endif %}
+                        </td>
+                        <td>{{ eq.nombre }}</td>
+                        <td>{{ eq.categoria.nombre|default:"-" }}</td>
+                        <td>
+                            {{ eq.marca|default:"-" }}
+                            {% if eq.modelo %}<br><small class="text-muted">{{ eq.modelo }}</small>{% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if eq.estado_operativo == 'ACTIVO' %}success{% elif eq.estado_operativo == 'MANTENIMIENTO' %}warning{% elif eq.estado_operativo == 'FUERA_SERVICIO' %}danger{% else %}secondary{% endif %}">
+                                {{ eq.get_estado_operativo_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if eq.proximo_mantenimiento %}
+                                {{ eq.proximo_mantenimiento|date:"d/m/Y" }}
+                            {% else %}
+                                <span class="text-muted">No programado</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'mantenimiento:detalle_equipo' eq.id %}" 
+                                   class="btn btn-outline-primary" title="Ver detalle">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if user.rol_principal == 'ADMIN' %}
+                                    <a href="{% url 'mantenimiento:editar_equipo' eq.id %}" 
+                                       class="btn btn-outline-warning" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                {% endif %}
+                                {% if user.rol_principal == 'ADMIN' %}
+                                    <a href="{% url 'mantenimiento:eliminar_equipo' eq.id %}" 
+                                       class="btn btn-outline-danger" title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No hay equipos que coincidan con los filtros.</p>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación -->
+    {% if page_obj.has_other_pages %}
+        <div class="card-footer bg-white">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1&{{ query_params }}">
+                                <i class="bi bi-chevron-double-left"></i>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ query_params }}">
+                                Anterior
+                            </a>
+                        </li>
+                    {% endif %}
+
+                    <li class="page-item active">
+                        <span class="page-link">
+                            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                        </span>
+                    </li>
+
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ query_params }}">
+                                Siguiente
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ query_params }}">
+                                <i class="bi bi-chevron-double-right"></i>
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

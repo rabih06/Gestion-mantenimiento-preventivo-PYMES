@@ -119,6 +119,26 @@ class Equipo(models.Model):
         ('FUERA_SERVICIO', 'Fuera de Servicio'),
         ('BAJA', 'Dado de Baja'),
     ]
+    
+    # ✅ NUEVO: Tipo de intervalo
+    TIPO_INTERVALO_CHOICES = [
+        ('DIAS', 'Días'),
+        ('HORAS', 'Horas de uso'),
+        ('KILOMETROS', 'Kilómetros'),
+    ]
+
+    # ✅ Renombramos para que sea más genérico
+    intervalo_mantenimiento = models.IntegerField(
+        default=0,
+        help_text="Valor del intervalo (interpretado según el tipo)"
+    )
+    tipo_intervalo = models.CharField(
+        max_length=15,
+        choices=TIPO_INTERVALO_CHOICES,
+        default='DIAS',
+        help_text="Unidad del intervalo de mantenimiento"
+    )
+
     codigo_interno = models.CharField(max_length=50, unique=True)
     nombre = models.CharField(max_length=150)
     categoria = models.ForeignKey(
@@ -163,6 +183,13 @@ class Equipo(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+    # Solo calcular fecha próxima si el intervalo es en DÍAS
+        if self.tipo_intervalo == 'DIAS' and self.ultimo_mantenimiento and self.intervalo_mantenimiento > 0:
+            from datetime import timedelta
+            self.proximo_mantenimiento = self.ultimo_mantenimiento + timedelta(days=self.intervalo_mantenimiento)
+        super().save(*args, **kwargs)
 
     class Meta:
         db_table = 'equipos'
