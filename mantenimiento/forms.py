@@ -1,13 +1,17 @@
 from django import forms
-from .models import Incidencia
-from .models import Equipo, User
 from django.forms import inlineformset_factory, TextInput
-from .models import AtributoEquipo
+from .models import (
+    Incidencia, Equipo, User, AtributoEquipo,
+    Repuesto, Proveedor,
+)
 
 
+# =====================================================
+# FORMULARIO DE INCIDENCIAS
+# =====================================================
 class IncidenciaForm(forms.ModelForm):
     """Formulario para que los operarios reporten fallas."""
-    
+
     class Meta:
         model = Incidencia
         fields = ['equipo', 'descripcion_falla', 'prioridad']
@@ -38,7 +42,6 @@ class IncidenciaForm(forms.ModelForm):
         }
 
     def clean_descripcion_falla(self):
-        """Validación personalizada: la descripción debe tener al menos 10 caracteres."""
         descripcion = self.cleaned_data.get('descripcion_falla', '').strip()
         if len(descripcion) < 10:
             raise forms.ValidationError(
@@ -46,6 +49,10 @@ class IncidenciaForm(forms.ModelForm):
             )
         return descripcion
 
+
+# =====================================================
+# FORMULARIO DE EQUIPOS
+# =====================================================
 class EquipoForm(forms.ModelForm):
     """Formulario para crear y editar equipos."""
 
@@ -88,6 +95,7 @@ class EquipoForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Solo mostrar usuarios con rol OPERARIO en el campo responsable
         self.fields['responsable'].queryset = User.objects.filter(
             rol_principal='OPERARIO',
             is_active=True,
@@ -109,7 +117,10 @@ class EquipoForm(forms.ModelForm):
             raise forms.ValidationError('Ya existe un equipo con este código.')
         return codigo
 
-# Formset para atributos técnicos (inline)
+
+# =====================================================
+# FORMSET DE ATRIBUTOS TÉCNICOS
+# =====================================================
 AtributoEquipoFormSet = inlineformset_factory(
     Equipo,
     AtributoEquipo,
@@ -122,3 +133,66 @@ AtributoEquipoFormSet = inlineformset_factory(
         'unidad': TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej: V'}),
     },
 )
+
+
+# =====================================================
+# FORMULARIO DE REPUESTOS
+# =====================================================
+class RepuestoForm(forms.ModelForm):
+    """Formulario para crear y editar repuestos."""
+
+    class Meta:
+        model = Repuesto
+        fields = [
+            'codigo_sku', 'nombre', 'descripcion', 'cantidad_actual',
+            'stock_minimo', 'ubicacion_almacen', 'unidad_medida',
+            'precio_unitario', 'proveedor',
+        ]
+        widgets = {
+            'codigo_sku': forms.TextInput(attrs={'class': 'form-control'}),
+            'nombre': forms.TextInput(attrs={'class': 'form-control'}),
+            'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'cantidad_actual': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'stock_minimo': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'ubicacion_almacen': forms.TextInput(attrs={'class': 'form-control'}),
+            'unidad_medida': forms.TextInput(attrs={'class': 'form-control'}),
+            'precio_unitario': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': '0.01'}),
+            'proveedor': forms.Select(attrs={'class': 'form-select'}),
+        }
+        labels = {
+            'codigo_sku': 'Código SKU *',
+            'nombre': 'Nombre del repuesto *',
+            'cantidad_actual': 'Cantidad actual en stock',
+            'stock_minimo': 'Stock mínimo',
+            'ubicacion_almacen': 'Ubicación en almacén',
+            'unidad_medida': 'Unidad de medida',
+            'precio_unitario': 'Precio unitario',
+        }
+        help_texts = {
+            'codigo_sku': 'Código único del repuesto (ej: REP-001).',
+            'stock_minimo': 'Cuando el stock baje de este valor, se generará una alerta.',
+            'unidad_medida': 'Ej: unidad, metro, litro, kg.',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Solo proveedores activos
+        self.fields['proveedor'].queryset = Proveedor.objects.filter(is_active=True).order_by('nombre')
+        self.fields['proveedor'].required = False
+
+    def clean_codigo_sku(self):
+        codigo = self.cleaned_data.get('codigo_sku', '').strip().upper()
+        qs = Repuesto.objects.filter(codigo_sku=codigo)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError('Ya existe un repuesto con este código SKU.')
+        return codigo
+
+    def clean(self):
+        cleaned = super().clean()
+        cantidad = cleaned.get('cantidad_actual', 0)
+        minimo = cleaned.get('stock_minimo', 0)
+        if cantidad < 0 or minimo < 0:
+            raise forms.ValidationError('Las cantidades no pueden ser negativas.')
+        return cleaned
