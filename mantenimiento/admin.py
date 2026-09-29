@@ -32,9 +32,22 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(Proveedor)
 class ProveedorAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'contacto', 'telefono', 'email', 'is_active')
+    list_display = ('nombre', 'contacto', 'telefono', 'email', 'is_active', 'total_repuestos')
     list_filter = ('is_active',)
     search_fields = ('nombre', 'email', 'contacto')
+    fieldsets = (
+        ('Información de la empresa', {
+            'fields': ('nombre', 'direccion', 'is_active')
+        }),
+        ('Persona de contacto', {
+            'fields': ('contacto', 'telefono', 'email'),
+            'description': 'Datos de la persona con quien se coordinan los pedidos.'
+        }),
+    )
+
+    def total_repuestos(self, obj):
+        return obj.repuestos.count()
+    total_repuestos.short_description = 'Repuestos'
 
 
 @admin.register(Repuesto)

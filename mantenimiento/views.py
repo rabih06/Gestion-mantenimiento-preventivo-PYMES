@@ -10,8 +10,9 @@ from .models import (
     Equipo, CategoriaEquipo, User, Alerta,
     Repuesto, Proveedor, OrdenTrabajo, Incidencia, PlanMantenimiento,
 )
+
 from .forms import (
-    IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm,
+    IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm, ProveedorForm
 )
 
 def login_view(request):
@@ -748,3 +749,166 @@ def eliminar_repuesto(request, repuesto_id):
         repuesto.delete()
         messages.success(request, f'Repuesto "{nombre}" eliminado correctamente.')
         return redirect('mantenimiento:lista_repuestos')
+
+    # =====================================================
+# CRUD DE PROVEEDORES
+# =====================================================
+
+@login_required
+def lista_proveedores(request):
+    """Lista de proveedores con búsqueda, filtros y paginación."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver los proveedores.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    proveedores = Proveedor.objects.all()
+
+    # Búsqueda
+    q = request.GET.get('q', '').strip()
+    if q:
+        proveedores = proveedores.filter(
+            Q(nombre__icontains=q) |
+            Q(contacto__icontains=q) |
+            Q(email__icontains=q) |
+            Q(telefono__icontains=q)
+        )
+
+    # Filtro por estado
+    estado_filtro = request.GET.get('estado', '')
+    if estado_filtro == 'activos':
+        proveedores = proveedores.filter(is_active=True)
+    elif estado_filtro == 'inactivos':
+        proveedores = proveedores.filter(is_active=False)
+
+    # Ordenamiento
+    orden = request.GET.get('orden', 'nombre')
+    proveedores = proveedores.order_by(orden)
+
+    # Paginación
+    paginator = Paginator(proveedores, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Contadores
+    total_proveedores = Proveedor.objects.count()
+    activos = Proveedor.objects.filter(is_active=True).count()
+    inactivos = Proveedor.objects.filter(is_active=False).count()
+
+    # Query params
+    query_params = request.GET.copy()
+    if 'page' in query_params:
+        del query_params['page']
+
+    context = {
+        'page_obj': page_obj,
+        'q': q,
+        'estado_filtro': estado_filtro,
+        'orden': orden,
+        'query_params': query_params.urlencode(),
+        'total_proveedores': total_proveedores,
+        'activos': activos,
+        'inactivos': inactivos,
+    }
+    return render(request, 'mantenimiento/proveedores/lista_proveedores.html', context)
+
+
+@login_required
+def detalle_proveedor(request, proveedor_id):
+    """Vista detallada de un proveedor con sus repuestos asociados."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver los proveedores.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+
+    # Repuestos que provee este proveedor
+    repuestos = proveedor.repuestos.all().order_by('nombre')
+
+    # Estadísticas
+    total_repuestos = repuestos.count()
+    repuestos_stock_bajo = sum(1 for r in repuestos if r.stock_bajo)
+
+    context = {
+        'proveedor': proveedor,
+        'repuestos': repuestos,
+        'total_repuestos': total_repuestos,
+        'repuestos_stock_bajo': repuestos_stock_bajo,
+    }
+    return render(request, 'mantenimiento/proveedores/detalle_proveedor.html', context)
+
+
+@login_required
+def crear_proveedor(request):
+    """Crear un nuevo proveedor (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden crear proveedores.')
+        return redirect('mantenimiento:lista_proveedores')
+
+    if request.method == 'POST':
+        form = ProveedorForm(request.POST)
+        if form.is_valid():
+            proveedor = form.save()
+            messages.success(request, f'✅ Proveedor "{proveedor.nombre}" creado correctamente.')
+            return redirect('mantenimiento:detalle_proveedor', proveedor_id=proveedor.id)
+    else:
+        form = ProveedorForm()
+
+    return render(request, 'mantenimiento/proveedores/form_proveedor.html', {
+        'form': form,
+        'titulo': 'Crear Nuevo Proveedor',
+        'accion': 'Crear',
+    })
+
+
+@login_required
+def editar_proveedor(request, proveedor_id):
+    """Editar un proveedor (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden editar proveedores.')
+        return redirect('mantenimiento:lista_proveedores')
+
+    proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+
+    if request.method == 'POST':
+        form = ProveedorForm(request.POST, instance=proveedor)
+        if form.is_valid():
+            proveedor = form.save()
+            messages.success(request, f'✅ Proveedor "{proveedor.nombre}" actualizado.')
+            return redirect('mantenimiento:detalle_proveedor', proveedor_id=proveedor.id)
+    else:
+        form = ProveedorForm(instance=proveedor)
+
+    return render(request, 'mantenimiento/proveedores/form_proveedor.html', {
+        'form': form,
+        'proveedor': proveedor,
+        'titulo': f'Editar: {proveedor.nombre}',
+        'accion': 'Guardar Cambios',
+    })
+
+
+@login_required
+def eliminar_proveedor(request, proveedor_id):
+    """Eliminar un proveedor (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden eliminar proveedores.')
+        return redirect('mantenimiento:lista_proveedores')
+
+    proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+
+    # Validar que no tenga repuestos asociados
+    repuestos_asociados = proveedor.repuestos.count()
+    if repuestos_asociados > 0:
+        messages.error(
+            request,
+            f'No se puede eliminar: el proveedor tiene {repuestos_asociados} repuesto(s) asociado(s). '
+            f'Reasigna esos repuestos a otro proveedor primero.'
+        )
+        return redirect('mantenimiento:detalle_proveedor', proveedor_id=proveedor.id)
+
+    if request.method == 'POST':
+        nombre = proveedor.nombre
+        proveedor.delete()
+        messages.success(request, f'Proveedor "{nombre}" eliminado correctamente.')
+        return redirect('mantenimiento:lista_proveedores')
+
+    return render(request, 'mantenimiento/proveedores/confirmar_eliminar.html', {'proveedor': proveedor})

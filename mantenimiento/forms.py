@@ -196,3 +196,54 @@ class RepuestoForm(forms.ModelForm):
         if cantidad < 0 or minimo < 0:
             raise forms.ValidationError('Las cantidades no pueden ser negativas.')
         return cleaned
+
+    # =====================================================
+# FORMULARIO DE PROVEEDORES
+# =====================================================
+class ProveedorForm(forms.ModelForm):
+    """Formulario para crear y editar proveedores."""
+
+    class Meta:
+        model = Proveedor
+        fields = ['nombre', 'contacto', 'telefono', 'email', 'direccion', 'is_active']
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control'}),
+            'contacto': forms.TextInput(attrs={'class': 'form-control'}),
+            'telefono': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'direccion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+        labels = {
+            'nombre': 'Nombre de la empresa *',
+            'contacto': 'Persona de contacto',
+            'telefono': 'Teléfono',
+            'email': 'Correo electrónico',
+            'direccion': 'Dirección',
+            'is_active': 'Proveedor activo',
+        }
+        help_texts = {
+            'nombre': 'Nombre comercial de la empresa proveedora.',
+            'contacto': 'Nombre del vendedor o persona con quien coordinas los pedidos.',
+            'telefono': 'Número de teléfono del contacto.',
+            'email': 'Correo para enviar órdenes de compra.',
+            'is_active': 'Desmarca si el proveedor ya no está disponible.',
+        }
+
+    def clean_nombre(self):
+        nombre = self.cleaned_data.get('nombre', '').strip()
+        qs = Proveedor.objects.filter(nombre__iexact=nombre)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError('Ya existe un proveedor con este nombre.')
+        return nombre
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email', '').strip().lower()
+        qs = Proveedor.objects.filter(email__iexact=email)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError('Ya existe un proveedor con este correo.')
+        return email
