@@ -1,19 +1,18 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
 from django.db.models import Count, Q
-from .models import Equipo, OrdenTrabajo, Alerta, Incidencia, Repuesto, CategoriaEquipo
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from .forms import IncidenciaForm
-from .models import Incidencia
-from django.utils import timezone
-from .forms import EquipoForm
 from django.core.paginator import Paginator
-from .forms import IncidenciaForm, EquipoForm, AtributoEquipoFormSet
+from django.utils import timezone
 
-
+from .models import (
+    Equipo, CategoriaEquipo, User, Alerta,
+    Repuesto, Proveedor, OrdenTrabajo, Incidencia, PlanMantenimiento,
+)
+from .forms import (
+    IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm,
+)
 
 def login_view(request):
     """Vista de login personalizada."""
@@ -576,3 +575,176 @@ def eliminar_equipo(request, equipo_id):
         return redirect('mantenimiento:lista_equipos')
 
     return render(request, 'mantenimiento/equipos/confirmar_eliminar.html', {'equipo': equipo})
+
+
+# =====================================================
+# CRUD DE REPUESTOS
+# =====================================================
+
+@login_required
+def lista_repuestos(request):
+    """Lista de repuestos con búsqueda, filtros y paginación."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver los repuestos.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    repuestos = Repuesto.objects.select_related('proveedor').all()
+
+    # Búsqueda
+    q = request.GET.get('q', '').strip()
+    if q:
+        repuestos = repuestos.filter(
+            Q(codigo_sku__icontains=q) |
+            Q(nombre__icontains=q) |
+            Q(descripcion__icontains=q)
+        )
+
+    # Filtro por proveedor
+    proveedor_filtro = request.GET.get('proveedor', '')
+    if proveedor_filtro:
+        repuestos = repuestos.filter(proveedor_id=proveedor_filtro)
+
+    # Filtro por stock bajo
+    stock_filtro = request.GET.get('stock', '')
+    if stock_filtro == 'bajo':
+        # Filtrar en Python porque el stock_bajo es una property
+        repuestos = [r for r in repuestos if r.stock_bajo]
+    elif stock_filtro == 'normal':
+        repuestos = [r for r in repuestos if not r.stock_bajo]
+
+    # Ordenamiento
+    orden = request.GET.get('orden', 'nombre')
+    if isinstance(repuestos, list):
+        repuestos = sorted(repuestos, key=lambda x: getattr(x, orden, ''))
+    else:
+        repuestos = repuestos.order_by(orden)
+
+    # Paginación
+    paginator = Paginator(repuestos, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Contadores
+    total_repuestos = Repuesto.objects.count()
+    repuestos_criticos = sum(1 for r in Repuesto.objects.all() if r.stock_bajo)
+
+    # Query params
+    query_params = request.GET.copy()
+    if 'page' in query_params:
+        del query_params['page']
+
+    context = {
+        'page_obj': page_obj,
+        'q': q,
+        'proveedor_filtro': proveedor_filtro,
+        'stock_filtro': stock_filtro,
+        'orden': orden,
+        'proveedores': Proveedor.objects.filter(is_active=True),
+        'query_params': query_params.urlencode(),
+        'total_repuestos': total_repuestos,
+        'repuestos_criticos': repuestos_criticos,
+    }
+    return render(request, 'mantenimiento/repuestos/lista_repuestos.html', context)
+
+
+@login_required
+def detalle_repuesto(request, repuesto_id):
+    """Vista detallada de un repuesto."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver los repuestos.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
+
+    # Órdenes donde se ha usado este repuesto
+    usos = repuesto.ordenes_usadas.select_related('orden', 'orden__equipo').order_by('-created_at')[:20]
+
+    # Alertas activas de este repuesto
+    alertas = repuesto.alertas.filter(leida=False).order_by('-created_at')
+
+    # Calcular estadísticas
+    total_usado = sum(u.cantidad_utilizada for u in repuesto.ordenes_usadas.all())
+
+    context = {
+        'repuesto': repuesto,
+        'usos': usos,
+        'alertas': alertas,
+        'total_usado': total_usado,
+    }
+    return render(request, 'mantenimiento/repuestos/detalle_repuesto.html', context)
+
+
+@login_required
+def crear_repuesto(request):
+    """Crear un nuevo repuesto (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden crear repuestos.')
+        return redirect('mantenimiento:lista_repuestos')
+
+    if request.method == 'POST':
+        form = RepuestoForm(request.POST)
+        if form.is_valid():
+            repuesto = form.save()
+            messages.success(request, f'✅ Repuesto "{repuesto.nombre}" creado correctamente.')
+            return redirect('mantenimiento:detalle_repuesto', repuesto_id=repuesto.id)
+    else:
+        form = RepuestoForm()
+
+    return render(request, 'mantenimiento/repuestos/form_repuesto.html', {
+        'form': form,
+        'titulo': 'Crear Nuevo Repuesto',
+        'accion': 'Crear',
+    })
+
+
+@login_required
+def editar_repuesto(request, repuesto_id):
+    """Editar un repuesto (ADMIN y TECNICO)."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para editar repuestos.')
+        return redirect('mantenimiento:lista_repuestos')
+
+    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
+
+    if request.method == 'POST':
+        form = RepuestoForm(request.POST, instance=repuesto)
+        if form.is_valid():
+            repuesto = form.save()
+            messages.success(request, f'✅ Repuesto "{repuesto.nombre}" actualizado.')
+            return redirect('mantenimiento:detalle_repuesto', repuesto_id=repuesto.id)
+    else:
+        form = RepuestoForm(instance=repuesto)
+
+    return render(request, 'mantenimiento/repuestos/form_repuesto.html', {
+        'form': form,
+        'repuesto': repuesto,
+        'titulo': f'Editar: {repuesto.nombre}',
+        'accion': 'Guardar Cambios',
+    })
+
+
+@login_required
+def eliminar_repuesto(request, repuesto_id):
+    """Eliminar un repuesto (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden eliminar repuestos.')
+        return redirect('mantenimiento:lista_repuestos')
+
+    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
+
+    # Validar que no esté en uso en órdenes activas
+    usos_activos = repuesto.ordenes_usadas.filter(
+        orden__estado__in=['PROGRAMADA', 'PROGRESO']
+    ).count()
+    if usos_activos > 0:
+        messages.error(
+            request,
+            f'No se puede eliminar: el repuesto está en uso en {usos_activos} orden(es) activa(s).'
+        )
+        return redirect('mantenimiento:detalle_repuesto', repuesto_id=repuesto.id)
+
+    if request.method == 'POST':
+        nombre = repuesto.nombre
+        repuesto.delete()
+        messages.success(request, f'Repuesto "{nombre}" eliminado correctamente.')
+        return redirect('mantenimiento:lista_repuestos')

@@ -1,0 +1,149 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}{{ repuesto.nombre }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="bi bi-box-seam"></i> {{ repuesto.nombre }}</h1>
+        <p class="text-muted mb-0">
+            SKU: <strong>{{ repuesto.codigo_sku }}</strong>
+            {% if repuesto.stock_bajo %}
+                <span class="badge bg-danger ms-2">
+                    <i class="bi bi-exclamation-triangle"></i> Stock Bajo
+                </span>
+            {% else %}
+                <span class="badge bg-success ms-2">
+                    <i class="bi bi-check-circle"></i> Stock OK
+                </span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mantenimiento:lista_repuestos' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        {% if user.rol_principal == 'ADMIN' or user.rol_principal == 'TECNICO' %}
+            <a href="{% url 'mantenimiento:editar_repuesto' repuesto.id %}" class="btn btn-warning">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+        {% endif %}
+        {% if user.rol_principal == 'ADMIN' %}
+            <a href="{% url 'mantenimiento:eliminar_repuesto' repuesto.id %}" class="btn btn-danger">
+                <i class="bi bi-trash"></i> Eliminar
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Alertas activas -->
+{% if alertas %}
+<div class="alert alert-danger">
+    <h5 class="alert-heading"><i class="bi bi-bell"></i> Alertas activas</h5>
+    <ul class="mb-0">
+        {% for alerta in alertas %}
+            <li>{{ alerta.mensaje }} <small class="text-muted">({{ alerta.created_at|date:"d/m/Y H:i" }})</small></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- Columna izquierda: ficha del repuesto -->
+    <div class="col-md-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Información del Repuesto</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Código SKU</span>
+                    <strong>{{ repuesto.codigo_sku }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Proveedor</span>
+                    <strong>{{ repuesto.proveedor.nombre|default:"Sin asignar" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Stock actual</span>
+                    <strong class="{% if repuesto.stock_bajo %}text-danger{% endif %}">
+                        {{ repuesto.cantidad_actual }} {{ repuesto.unidad_medida }}
+                    </strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Stock mínimo</span>
+                    <strong>{{ repuesto.stock_minimo }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Precio unitario</span>
+                    <strong>${{ repuesto.precio_unitario }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Ubicación</span>
+                    <strong>{{ repuesto.ubicacion_almacen|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Total usado</span>
+                    <strong>{{ total_usado }} {{ repuesto.unidad_medida }}</strong>
+                </li>
+            </ul>
+        </div>
+
+        {% if repuesto.descripcion %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-card-text"></i> Descripción</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">{{ repuesto.descripcion }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Columna derecha: historial de uso -->
+    <div class="col-md-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Historial de Uso</h5>
+                <span class="badge bg-secondary">{{ usos|length }} usos recientes</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>OT</th>
+                            <th>Equipo</th>
+                            <th>Cantidad</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for uso in usos %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'mantenimiento:detalle_orden' uso.orden.id %}">
+                                        OT-{{ uso.orden.id }}
+                                    </a>
+                                </td>
+                                <td>
+                                    {{ uso.orden.equipo.codigo_interno }}
+                                    <br>
+                                    <small class="text-muted">{{ uso.orden.equipo.nombre }}</small>
+                                </td>
+                                <td><strong>{{ uso.cantidad_utilizada }}</strong></td>
+                                <td>{{ uso.created_at|date:"d/m/Y H:i" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">
+                                    Este repuesto aún no se ha utilizado en ninguna orden.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

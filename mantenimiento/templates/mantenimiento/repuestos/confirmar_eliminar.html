@@ -1,0 +1,38 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Eliminar Repuesto{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-danger">
+            <div class="card-header bg-danger text-white">
+                <h4 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Confirmar Eliminación</h4>
+            </div>
+            <div class="card-body">
+                <p class="lead">¿Estás seguro de que quieres eliminar este repuesto?</p>
+
+                <div class="alert alert-warning">
+                    <strong>{{ repuesto.codigo_sku }}</strong> - {{ repuesto.nombre }}
+                    <br>
+                    <small>Stock actual: {{ repuesto.cantidad_actual }} {{ repuesto.unidad_medida }}</small>
+                    <br>
+                    <small class="text-danger">Esta acción NO se puede deshacer.</small>
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'mantenimiento:detalle_repuesto' repuesto.id %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash"></i> Sí, eliminar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

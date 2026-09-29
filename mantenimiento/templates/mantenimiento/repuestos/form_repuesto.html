@@ -1,0 +1,87 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-box-seam"></i> {{ titulo }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="row">
+                        <!-- Identificación -->
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">{{ form.codigo_sku.label }}</label>
+                            {{ form.codigo_sku }}
+                            <small class="text-muted">{{ form.codigo_sku.help_text }}</small>
+                            {% if form.codigo_sku.errors %}
+                                <div class="text-danger small">{{ form.codigo_sku.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">{{ form.nombre.label }}</label>
+                            {{ form.nombre }}
+                            {% if form.nombre.errors %}
+                                <div class="text-danger small">{{ form.nombre.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Stock -->
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">{{ form.cantidad_actual.label }}</label>
+                            {{ form.cantidad_actual }}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">{{ form.stock_minimo.label }}</label>
+                            {{ form.stock_minimo }}
+                            <small class="text-muted">{{ form.stock_minimo.help_text }}</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">{{ form.unidad_medida.label }}</label>
+                            {{ form.unidad_medida }}
+                            <small class="text-muted">{{ form.unidad_medida.help_text }}</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">{{ form.precio_unitario.label }}</label>
+                            {{ form.precio_unitario }}
+                        </div>
+
+                        <!-- Ubicación y Proveedor -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.ubicacion_almacen.label }}</label>
+                            {{ form.ubicacion_almacen }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Proveedor</label>
+                            {{ form.proveedor }}
+                        </div>
+
+                        <!-- Descripción -->
+                        <div class="col-12 mb-3">
+                            <label class="form-label">Descripción</label>
+                            {{ form.descripcion }}
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'mantenimiento:lista_repuestos' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> {{ accion }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
