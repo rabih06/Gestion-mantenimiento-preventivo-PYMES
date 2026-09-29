@@ -93,9 +93,10 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/mantenimiento/proveedor/">
-                                <i class="bi bi-truck"></i> Proveedores
-                            </a>
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_proveedores' %}">
+                                <i class="bi bi-truck">
+                                </i> Proveedores
+                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="/admin/mantenimiento/ordentrabajo/">
@@ -114,27 +115,29 @@
                     {% elif user.rol_principal == 'TECNICO' %}
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:dashboard_tecnico' %}">
-                                <i class="bi bi-kanban"></i> Mis Órdenes
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
-                                <i class="bi bi-bell"></i> Alertas
-                                {% if alertas_count > 0 %}
-                                    <span class="badge bg-danger ms-2">{{ alertas_count }}</span>
-                                {% endif %}
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">
-                                <i class="bi bi-cpu"></i> Equipos
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'mantenimiento:lista_repuestos' %}">
-                                <i class="bi bi-box-seam"></i> Repuestos
-                            </a>
-                        </li>
+                                <i class="bi bi-kanban">
+                                </i> Mis Órdenes</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
+                                    <i class="bi bi-bell">
+                                    </i> Alertas...</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">
+                                    <i class="bi bi-cpu">
+                                    </i> Equipos</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'mantenimiento:lista_repuestos' %}">
+                                    <i class="bi bi-box-seam">
+                                    </i> Repuestos</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'mantenimiento:lista_proveedores' %}">
+                                    <i class="bi bi-truck">
+                                    </i> Proveedores</a>
+                            </li>
 
                     {# ============================================ #}
                     {# SIDEBAR DEL OPERARIO                          #}
