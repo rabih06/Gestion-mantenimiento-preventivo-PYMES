@@ -1,0 +1,241 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Planes de Mantenimiento{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-calendar-event"></i> Planes de Mantenimiento</h1>
+    {% if user.rol_principal == 'ADMIN' %}
+        <a href="{% url 'mantenimiento:crear_plan' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Nuevo Plan
+        </a>
+    {% endif %}
+</div>
+
+<!-- Resumen -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-start border-primary border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Total</h6>
+                <h3 class="mb-0">{{ total_planes }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-success border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Activos</h6>
+                <h3 class="mb-0 text-success">{{ activos }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-warning border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Próximos 7 días</h6>
+                <h3 class="mb-0 text-warning">{{ proximos_7d }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-danger border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Vencidos</h6>
+                <h3 class="mb-0 text-danger">{{ vencidos }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Buscar</label>
+                <input type="text" name="q" class="form-control"
+                       placeholder="Nombre, equipo..." value="{{ q }}">
+            </div>
+                <select name="equipo" class="form-select">
+                    <option value="">Todos</option>
+                    {% for eq in equipos %}
+                        <option value="{{ eq.id }}" {% if equipo_filtro == eq.id|stringformat:"s" %}selected{% endif %}>
+                            {{ eq.codigo_interno }} - {{ eq.nombre }}
+                        </option>
+                    {% endfor %}
+                </select>
+            <div class="col-md-2">
+                <label class="form-label">Técnico</label>
+                    <select name="tecnico" class="form-select">
+                        <option value="">Todos</option>
+                        {% for tec in tecnicos %}
+                            <option value="{{ tec.id }}" {% if tecnico_filtro == tec.id|stringformat:"s" %}selected{% endif %}>
+                            {{ tec.get_full_name|default:tec.username }}
+                            </option>
+                        {% endfor %}
+                    </select>
+            </div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Estado</label>
+                <select name="estado" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="activos" {% if estado_filtro == 'activos' %}selected{% endif %}>Activos</option>
+                    <option value="inactivos" {% if estado_filtro == 'inactivos' %}selected{% endif %}>Inactivos</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Vencimiento</label>
+                <select name="vencimiento" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="vencidos" {% if vencimiento_filtro == 'vencidos' %}selected{% endif %}>Vencidos</option>
+                    <option value="proximos_7dias" {% if vencimiento_filtro == 'proximos_7dias' %}selected{% endif %}>Próximos 7 días</option>
+                    <option value="proximos_30dias" {% if vencimiento_filtro == 'proximos_30dias' %}selected{% endif %}>Próximos 30 días</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-fill">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+                <a href="{% url 'mantenimiento:lista_planes' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabla -->
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Plan</th>
+                    <th>Equipo</th>
+                    <th>Técnico</th>
+                    <th>Frecuencia</th>
+                    <th>Última ejecución</th>
+                    <th>Próxima ejecución</th>
+                    <th>Estado</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for plan in page_obj %}
+                    <tr class="{% if plan.estado_vencimiento == 'vencido' %}table-danger{% elif plan.estado_vencimiento == 'proximo' %}table-warning{% endif %}">
+                        <td>
+                            <strong>{{ plan.nombre }}</strong>
+                            {% if not plan.is_active %}
+                                <span class="badge bg-secondary ms-1">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ plan.equipo.codigo_interno }}
+                            <br>
+                            <small class="text-muted">{{ plan.equipo.nombre }}</small>
+                        </td>
+                        <td>
+                            {% if plan.tecnico_asignado %}
+                                <i class="bi bi-person-badge"></i>
+                                {{ plan.tecnico_asignado.get_full_name|default:plan.tecnico_asignado.username }}
+                            {% else %}
+                                <span class="text-muted">Sin asignar</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if plan.frecuencia_dias %}
+                                Cada {{ plan.frecuencia_dias }} días
+                            {% endif %}
+                            {% if plan.frecuencia_uso %}
+                                {% if plan.frecuencia_dias %}<br>{% endif %}
+                                Cada {{ plan.frecuencia_uso }} h/km
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if plan.ultima_ejecucion %}
+                                {{ plan.ultima_ejecucion|date:"d/m/Y" }}
+                            {% else %}
+                                <span class="text-muted">Nunca</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if plan.proxima_ejecucion %}
+                                {{ plan.proxima_ejecucion|date:"d/m/Y" }}
+                                {% if plan.estado_vencimiento == 'vencido' %}
+                                    <i class="bi bi-exclamation-triangle-fill text-danger ms-1" title="Vencido"></i>
+                                {% elif plan.estado_vencimiento == 'proximo' %}
+                                    <i class="bi bi-clock-fill text-warning ms-1" title="Próximo"></i>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">Por uso</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if plan.is_active %}
+                                <span class="badge bg-success">Activo</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'mantenimiento:detalle_plan' plan.id %}"
+                                   class="btn btn-outline-primary" title="Ver detalle">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if plan.is_active %}
+                                    <a href="{% url 'mantenimiento:aplicar_plan' plan.id %}"
+                                       class="btn btn-outline-success" title="Aplicar (crear OT)"
+                                       onclick="return confirm('¿Crear una Orden de Trabajo preventiva a partir de este plan?')">
+                                        <i class="bi bi-play-fill"></i>
+                                    </a>
+                                {% endif %}
+                                {% if user.rol_principal == 'ADMIN' %}
+                                    <a href="{% url 'mantenimiento:editar_plan' plan.id %}"
+                                       class="btn btn-outline-warning" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a href="{% url 'mantenimiento:eliminar_plan' plan.id %}"
+                                       class="btn btn-outline-danger" title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No hay planes que coincidan con los filtros.</p>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+        <div class="card-footer bg-white">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ query_params }}">Anterior</a>
+                        </li>
+                    {% endif %}
+                    <li class="page-item active">
+                        <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ query_params }}">Siguiente</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

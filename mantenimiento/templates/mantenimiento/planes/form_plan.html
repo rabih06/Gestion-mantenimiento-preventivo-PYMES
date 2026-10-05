@@ -1,0 +1,111 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-9">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-calendar-event"></i> {{ titulo }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="row">
+                        <!-- Equipo -->
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">{{ form.equipo.label }}</label>
+                            {{ form.equipo }}
+                            <small class="text-muted">{{ form.equipo.help_text }}</small>
+                            {% if form.equipo.errors %}
+                                <div class="text-danger small">{{ form.equipo.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <!-- ✅ NUEVO: Técnico asignado -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.tecnico_asignado.label }}</label>
+                            {{ form.tecnico_asignado }}
+                            <small class="text-muted">{{ form.tecnico_asignado.help_text }}</small>
+                             {% if form.tecnico_asignado.errors %}
+                                <div class="text-danger small">{{ form.tecnico_asignado.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <!-- Nombre -->
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">{{ form.nombre.label }}</label>
+                            {{ form.nombre }}
+                            <small class="text-muted">{{ form.nombre.help_text }}</small>
+                            {% if form.nombre.errors %}
+                                <div class="text-danger small">{{ form.nombre.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Descripción -->
+                        <div class="col-12 mb-3">
+                            <label class="form-label">{{ form.descripcion.label }}</label>
+                            {{ form.descripcion }}
+                            {% if form.descripcion.errors %}
+                                <div class="text-danger small">{{ form.descripcion.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Frecuencias -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.frecuencia_dias.label }}</label>
+                            {{ form.frecuencia_dias }}
+                            <small class="text-muted">{{ form.frecuencia_dias.help_text }}</small>
+                            {% if form.frecuencia_dias.errors %}
+                                <div class="text-danger small">{{ form.frecuencia_dias.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.frecuencia_uso.label }}</label>
+                            {{ form.frecuencia_uso }}
+                            <small class="text-muted">{{ form.frecuencia_uso.help_text }}</small>
+                        </div>
+
+                        <!-- Última ejecución -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.ultima_ejecucion.label }}</label>
+                            {{ form.ultima_ejecucion }}
+                            <small class="text-muted">{{ form.ultima_ejecucion.help_text }}</small>
+                        </div>
+
+                        <!-- Activo -->
+                        <div class="col-md-6 mb-3 d-flex align-items-center">
+                            <div class="form-check mt-4">
+                                {{ form.is_active }}
+                                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                    {{ form.is_active.label }}
+                                </label>
+                                <br>
+                                <small class="text-muted">{{ form.is_active.help_text }}</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        La <strong>próxima ejecución</strong> se calcula automáticamente
+                        basándose en la última ejecución + la frecuencia en días.
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'mantenimiento:lista_planes' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> {{ accion }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

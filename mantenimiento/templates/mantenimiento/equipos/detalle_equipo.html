@@ -201,24 +201,44 @@
 
         <!-- Planes de mantenimiento -->
         {% if planes %}
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-white">
-                <h5 class="mb-0"><i class="bi bi-calendar-event"></i> Planes de Mantenimiento</h5>
-            </div>
-            <ul class="list-group list-group-flush">
-                {% for plan in planes %}
-                    <li class="list-group-item">
-                        <strong>{{ plan.nombre }}</strong>
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-calendar-event"></i> Planes de Mantenimiento</h5>
+        {% if user.rol_principal == 'ADMIN' %}
+            <a href="{% url 'mantenimiento:crear_plan' %}?equipo={{ equipo.id }}" class="btn btn-sm btn-primary">
+                <i class="bi bi-plus-circle"></i> Nuevo Plan
+            </a>
+        {% endif %}
+    </div>
+    <ul class="list-group list-group-flush">
+        {% for plan in planes %}
+            <li class="list-group-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <a href="{% url 'mantenimiento:detalle_plan' plan.id %}">
+                            <strong>{{ plan.nombre }}</strong>
+                        </a>
                         <br>
                         <small class="text-muted">
                             Cada {{ plan.frecuencia_dias }} días
                             {% if plan.proxima_ejecucion %} | Próxima: {{ plan.proxima_ejecucion|date:"d/m/Y" }}{% endif %}
                         </small>
-                    </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-    </div>
+                    </div>
+                    {% if plan.is_active %}
+                        <span class="badge bg-success">Activo</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Inactivo</span>
+                    {% endif %}
+                </div>
+            </li>
+        {% empty %}
+            <li class="list-group-item text-center text-muted py-3">
+                Este equipo no tiene planes de mantenimiento definidos.
+            </li>
+        {% endfor %}
+    </ul>
 </div>
+{% endif %}
+    </div>
+    </div>
 {% endblock %}

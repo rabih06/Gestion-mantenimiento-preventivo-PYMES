@@ -210,16 +210,27 @@ class PlanMantenimiento(models.Model):
         on_delete=models.CASCADE,
         related_name='planes'
     )
+    tecnico_asignado = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='planes_asignados',
+        limit_choices_to={'rol_principal': 'TECNICO'},
+        help_text="Técnico que se asignará automáticamente al aplicar el plan"
+    )
     nombre = models.CharField(max_length=150)
     descripcion = models.TextField()
     frecuencia_dias = models.IntegerField(
-        help_text="Cada cuántos días debe ejecutarse (0 si solo se usa frecuencia por uso)"
+        default=0,
+        help_text="Cada cuántos días debe ejecutarse (0 = no aplica por días)"
     )
     frecuencia_uso = models.IntegerField(
         null=True,
         blank=True,
         help_text="Opcional: cada cuántas horas/km (según especificaciones del equipo)"
     )
+    
     ultima_ejecucion = models.DateTimeField(null=True, blank=True)
     proxima_ejecucion = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -234,6 +245,36 @@ class PlanMantenimiento(models.Model):
 
     def __str__(self):
         return f"{self.nombre} ({self.equipo.codigo_interno})"
+
+    def save(self, *args, **kwargs):
+        """Calcula automáticamente la próxima ejecución."""
+        from datetime import timedelta
+        from django.utils import timezone
+
+        # Si tiene frecuencia por días y hay una última ejecución (o usamos hoy), calculamos
+        if self.frecuencia_dias and self.frecuencia_dias > 0:
+            base = self.ultima_ejecucion or timezone.now()
+            self.proxima_ejecucion = base + timedelta(days=self.frecuencia_dias)
+        else:
+            # Sin frecuencia por días → sin fecha de próxima ejecución (se maneja por uso)
+            self.proxima_ejecucion = None
+
+        super().save(*args, **kwargs)
+
+    @property
+    def estado_vencimiento(self):
+        """Devuelve el estado de vencimiento del plan."""
+        from django.utils import timezone
+        if not self.proxima_ejecucion:
+            return 'sin_fecha'
+        hoy = timezone.now()
+        dias = (self.proxima_ejecucion - hoy).days
+        if dias < 0:
+            return 'vencido'
+        elif dias <= 7:
+            return 'proximo'
+        else:
+            return 'al_dia'
 
 
 # =====================================================
