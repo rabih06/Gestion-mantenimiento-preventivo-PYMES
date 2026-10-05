@@ -1,0 +1,74 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Crear OT desde Incidencia{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-9">
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0"><i class="bi bi-plus-circle"></i> Crear Orden de Trabajo</h4>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <strong>Incidencia #{{ incidencia.id }}</strong>
+                    <br>
+                    <small>
+                        <strong>Equipo:</strong> {{ incidencia.equipo.codigo_interno }} - {{ incidencia.equipo.nombre }}
+                        <br>
+                        <strong>Reportado por:</strong> {{ incidencia.operario.get_full_name }}
+                        <br>
+                        <strong>Prioridad:</strong> {{ incidencia.get_prioridad_display }}
+                    </small>
+                    <hr>
+                    <p class="mb-0" style="white-space: pre-line;">{{ incidencia.descripcion_falla }}</p>
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label"><strong>Técnico asignado</strong> (opcional)</label>
+                            <select name="tecnico" class="form-select">
+                                <option value="">Sin asignar</option>
+                                {% for tec in tecnicos %}
+                                    <option value="{{ tec.id }}">{{ tec.get_full_name|default:tec.username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label"><strong>Prioridad</strong></label>
+                            <select name="prioridad" class="form-select">
+                                {% for valor, etiqueta in prioridades %}
+                                    <option value="{{ valor }}" {% if valor == incidencia.prioridad %}selected{% endif %}>{{ etiqueta }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label"><strong>Fecha programada</strong></label>
+                            <input type="datetime-local" name="fecha_programada" class="form-control"
+                                   value="{{ fecha_sugerida }}" required>
+                        </div>
+
+                        <div class="col-12 mb-3">
+                            <label class="form-label"><strong>Descripción del trabajo</strong> (opcional)</label>
+                            <textarea name="descripcion" class="form-control" rows="4"
+                                      placeholder="Déjalo vacío para usar la descripción de la incidencia"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'mantenimiento:detalle_incidencia' incidencia.id %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check-circle"></i> Crear Orden
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

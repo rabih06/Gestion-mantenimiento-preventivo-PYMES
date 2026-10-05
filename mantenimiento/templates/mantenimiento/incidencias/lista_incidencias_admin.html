@@ -1,0 +1,165 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Gestión de Incidencias{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-exclamation-triangle"></i> Gestión de Incidencias</h1>
+</div>
+
+<!-- Resumen -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-start border-primary border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Total</h6>
+                <h3 class="mb-0">{{ total }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-warning border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Pendientes</h6>
+                <h3 class="mb-0 text-warning">{{ pendientes }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-info border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">En Revisión</h6>
+                <h3 class="mb-0 text-info">{{ en_revision }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-success border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Resueltas</h6>
+                <h3 class="mb-0 text-success">{{ resueltas }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Buscar</label>
+                <input type="text" name="q" class="form-control"
+                       placeholder="Descripción, equipo, operario..." value="{{ q }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Estado</label>
+                <select name="estado" class="form-select">
+                    <option value="">Todos</option>
+                    {% for valor, etiqueta in estados %}
+                        <option value="{{ valor }}" {% if estado_filtro == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Prioridad</label>
+                <select name="prioridad" class="form-select">
+                    <option value="">Todas</option>
+                    {% for valor, etiqueta in prioridades %}
+                        <option value="{{ valor }}" {% if prioridad_filtro == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-fill">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+                <a href="{% url 'mantenimiento:lista_incidencias_admin' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<p class="text-muted">
+    <i class="bi bi-info-circle"></i> Mostrando {{ page_obj.start_index }}-{{ page_obj.end_index }} de {{ total }} incidencia(s)
+</p>
+
+<!-- Tabla -->
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>Equipo</th>
+                    <th>Operario</th>
+                    <th>Prioridad</th>
+                    <th>Estado</th>
+                    <th>Fecha</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inc in page_obj %}
+                    <tr>
+                        <td><strong>#{{ inc.id }}</strong></td>
+                        <td>
+                            {{ inc.equipo.codigo_interno }}
+                            <br>
+                            <small class="text-muted">{{ inc.equipo.nombre }}</small>
+                        </td>
+                        <td>
+                            {{ inc.operario.get_full_name|default:inc.operario.username }}
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if inc.prioridad == 'CRITICA' %}danger{% elif inc.prioridad == 'ALTA' %}warning{% elif inc.prioridad == 'MEDIA' %}info{% else %}secondary{% endif %}">
+                                {{ inc.get_prioridad_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if inc.estado == 'RESUELTA' %}success{% elif inc.estado == 'PENDIENTE' %}warning{% elif inc.estado == 'REVISION' %}info{% else %}secondary{% endif %}">
+                                {{ inc.get_estado_display }}
+                            </span>
+                        </td>
+                        <td>{{ inc.fecha_reporte|date:"d/m/Y H:i" }}</td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'mantenimiento:detalle_incidencia' inc.id %}"
+                                   class="btn btn-outline-primary" title="Ver detalle">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No hay incidencias que coincidan con los filtros.</p>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+        <div class="card-footer bg-white">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item"><a class="page-link" href="?page=1&{{ query_params }}"><i class="bi bi-chevron-double-left"></i></a></li>
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ query_params }}">Anterior</a></li>
+                    {% endif %}
+                    <li class="page-item active"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+                    {% if page_obj.has_next %}
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ query_params }}">Siguiente</a></li>
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ query_params }}"><i class="bi bi-chevron-double-right"></i></a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -8,114 +8,178 @@
     Bienvenido, <strong>{{ user.get_full_name|default:user.username }}</strong>
 </div>
 
-<!-- KPIs Principales -->
-<div class="row mb-4">
+<!-- ============================================== -->
+<!-- KPIs PRINCIPALES                                -->
+<!-- ============================================== -->
+<div class="row mb-4 g-3">
+    <!-- Equipos Registrados -->
     <div class="col-md-4">
-        <div class="card border-start border-primary border-4 shadow-sm">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="text-muted text-uppercase mb-1">Equipos Registrados</h6>
-                        <h2 class="mb-0">{{ total_equipos }}</h2>
+        <a href="{% url 'mantenimiento:lista_equipos' %}" class="text-decoration-none">
+            <div class="card border-start border-primary border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Equipos Registrados</h6>
+                            <h2 class="mb-0 text-dark">{{ total_equipos }}</h2>
+                            <small class="text-primary">Ver todos <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-cpu text-primary" style="font-size: 2.5rem;"></i>
                     </div>
-                    <i class="bi bi-cpu text-primary" style="font-size: 2.5rem;"></i>
                 </div>
             </div>
-        </div>
+        </a>
     </div>
+
+    <!-- Órdenes Abiertas -->
     <div class="col-md-4">
-        <div class="card border-start border-warning border-4 shadow-sm">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="text-muted text-uppercase mb-1">Órdenes Abiertas</h6>
-                        <h2 class="mb-0">{{ ordenes_abiertas }}</h2>
+        <a href="{% url 'mantenimiento:lista_ordenes' %}?estado=PROGRAMADA" class="text-decoration-none">
+            <div class="card border-start border-warning border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Órdenes Abiertas</h6>
+                            <h2 class="mb-0 text-dark">{{ ordenes_abiertas }}</h2>
+                            <small class="text-warning">Ver todas <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-clipboard-check text-warning" style="font-size: 2.5rem;"></i>
                     </div>
-                    <i class="bi bi-clipboard-check text-warning" style="font-size: 2.5rem;"></i>
                 </div>
             </div>
-        </div>
+        </a>
     </div>
+
+    <!-- Alertas Activas -->
     <div class="col-md-4">
-        <div class="card border-start border-danger border-4 shadow-sm">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="text-muted text-uppercase mb-1">Alertas Activas</h6>
-                        <h2 class="mb-0">{{ alertas_activas }}</h2>
+        <a href="{% url 'mantenimiento:lista_alertas' %}" class="text-decoration-none">
+            <div class="card border-start border-danger border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Alertas Activas</h6>
+                            <h2 class="mb-0 text-dark">{{ alertas_activas }}</h2>
+                            <small class="text-danger">Ver todas <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-bell text-danger" style="font-size: 2.5rem;"></i>
                     </div>
-                    <i class="bi bi-bell text-danger" style="font-size: 2.5rem;"></i>
                 </div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
 
-<!-- KPIs Secundarios -->
-<div class="row mb-4">
+<!-- ============================================== -->
+<!-- KPIs SECUNDARIOS                                -->
+<!-- ============================================== -->
+<div class="row mb-4 g-3">
+    <!-- Incidencias Pendientes -->
     <div class="col-md-6">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h6 class="text-muted text-uppercase">Incidencias Pendientes</h6>
-                <h3>{{ incidencias_pendientes }}</h3>
+        <a href="{% url 'mantenimiento:lista_incidencias_admin' %}?estado=PENDIENTE" class="text-decoration-none">
+            <div class="card border-start border-info border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Incidencias Pendientes</h6>
+                            <h2 class="mb-0 text-dark">{{ incidencias_pendientes }}</h2>
+                            <small class="text-info">Ver todas <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-exclamation-triangle text-info" style="font-size: 2.5rem;"></i>
+                    </div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
+
+    <!-- Repuestos con Stock Bajo -->
     <div class="col-md-6">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h6 class="text-muted text-uppercase">Repuestos con Stock Bajo</h6>
-                <h3 class="text-danger">{{ repuestos_bajos }}</h3>
+        <a href="{% url 'mantenimiento:lista_repuestos' %}?stock=bajo" class="text-decoration-none">
+            <div class="card border-start border-secondary border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Repuestos con Stock Bajo</h6>
+                            <h2 class="mb-0 {% if repuestos_bajos > 0 %}text-danger{% else %}text-dark{% endif %}">
+                                {{ repuestos_bajos }}
+                            </h2>
+                            <small class="text-secondary">Ver repuestos <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-box-seam text-secondary" style="font-size: 2.5rem;"></i>
+                    </div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
 
-<!-- Gráfico y Listas -->
-<div class="row">
+<!-- ============================================== -->
+<!-- GRÁFICO Y ALERTAS                               -->
+<!-- ============================================== -->
+<div class="row mb-4 g-3">
+    <!-- Gráfico Equipos por Estado -->
     <div class="col-md-6">
-        <div class="card shadow-sm mb-4">
+        <div class="card shadow-sm h-100">
             <div class="card-header bg-white">
                 <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Equipos por Estado</h5>
             </div>
-            <div class="card-body">
-                <canvas id="graficoEstados" height="200"></canvas>
+            <div class="card-body d-flex align-items-center justify-content-center">
+                <canvas id="graficoEstados" style="max-height: 280px;"></canvas>
             </div>
         </div>
     </div>
+
+    <!-- Últimas Alertas -->
     <div class="col-md-6">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-white">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-bell"></i> Últimas Alertas</h5>
+                <a href="{% url 'mantenimiento:lista_alertas' %}" class="btn btn-sm btn-outline-danger">
+                    Ver todas
+                </a>
             </div>
             <ul class="list-group list-group-flush">
                 {% for alerta in ultimas_alertas %}
                     <li class="list-group-item">
-                        <span class="badge bg-{% if alerta.tipo == 'STOCK_BAJO' %}danger{% else %}warning{% endif %} me-2">
-                            {{ alerta.get_tipo_display }}
-                        </span>
-                        {{ alerta.mensaje|truncatechars:60 }}
+                        <div class="d-flex align-items-start gap-2">
+                            <span class="badge bg-{% if alerta.tipo == 'STOCK_BAJO' %}danger{% elif alerta.tipo == 'EQUIPO_CRITICO' %}danger{% elif alerta.tipo == 'MANTENIMIENTO_VENCIDO' %}warning{% else %}info{% endif %} flex-shrink-0">
+                                {{ alerta.get_tipo_display }}
+                            </span>
+                            <div class="text-break small">
+                                {{ alerta.mensaje }}
+                                <br>
+                                <small class="text-muted">
+                                    <i class="bi bi-clock"></i> {{ alerta.created_at|date:"d/m/Y H:i" }}
+                                </small>
+                            </div>
+                        </div>
                     </li>
                 {% empty %}
-                    <li class="list-group-item text-muted">No hay alertas activas.</li>
+                    <li class="list-group-item text-center text-muted py-4">
+                        <i class="bi bi-bell-slash" style="font-size: 2rem;"></i>
+                        <p class="mb-0 mt-2">No hay alertas activas.</p>
+                    </li>
                 {% endfor %}
             </ul>
         </div>
     </div>
 </div>
 
-<!-- Últimas Órdenes -->
+<!-- ============================================== -->
+<!-- ÚLTIMAS ÓRDENES                                 -->
+<!-- ============================================== -->
 <div class="card shadow-sm">
-    <div class="card-header bg-white">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Últimas Órdenes de Trabajo</h5>
+        <a href="{% url 'mantenimiento:lista_ordenes' %}" class="btn btn-sm btn-outline-primary">
+            Ver todas
+        </a>
     </div>
     <div class="table-responsive">
-        <table class="table table-hover mb-0">
+        <table class="table table-hover mb-0 align-middle">
             <thead class="table-light">
                 <tr>
                     <th>OT</th>
                     <th>Equipo</th>
                     <th>Tipo</th>
+                    <th>Técnico</th>
                     <th>Estado</th>
                     <th>Fecha Programada</th>
                 </tr>
@@ -123,9 +187,24 @@
             <tbody>
                 {% for orden in ultimas_ordenes %}
                     <tr>
-                        <td>OT-{{ orden.id }}</td>
+                        <td>
+                            <a href="{% url 'mantenimiento:detalle_orden' orden.id %}">
+                                <strong>OT-{{ orden.id }}</strong>
+                            </a>
+                        </td>
                         <td>{{ orden.equipo.codigo_interno }}</td>
-                        <td>{{ orden.get_tipo_display }}</td>
+                        <td>
+                            <span class="badge bg-{% if orden.tipo == 'PREVENTIVO' %}info{% elif orden.tipo == 'CORRECTIVO' %}warning{% else %}danger{% endif %} text-dark">
+                                {{ orden.get_tipo_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if orden.tecnico %}
+                                {{ orden.tecnico.get_full_name|default:orden.tecnico.username }}
+                            {% else %}
+                                <span class="text-muted">Sin asignar</span>
+                            {% endif %}
+                        </td>
                         <td>
                             <span class="badge bg-{% if orden.estado == 'COMPLETADA' %}success{% elif orden.estado == 'PROGRESO' %}primary{% elif orden.estado == 'CANCELADA' %}secondary{% else %}warning{% endif %}">
                                 {{ orden.get_estado_display }}
@@ -134,33 +213,61 @@
                         <td>{{ orden.fecha_programada|date:"d/m/Y" }}</td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="5" class="text-center text-muted">No hay órdenes registradas.</td></tr>
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mb-0 mt-2">No hay órdenes registradas.</p>
+                        </td>
+                    </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
-<!-- Chart.js -->
+<!-- ============================================== -->
+<!-- ESTILOS ADICIONALES                             -->
+<!-- ============================================== -->
+<style>
+    /* Efecto hover en las tarjetas clicables */
+    .card-hover {
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        cursor: pointer;
+    }
+    .card-hover:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15) !important;
+    }
+</style>
+
+<!-- ============================================== -->
+<!-- CHART.JS                                        -->
+<!-- ============================================== -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    const ctx = document.getElementById('graficoEstados').getContext('2d');
-    new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: {{ estados_labels|safe }},
-            datasets: [{
-                data: {{ estados_data|safe }},
-                backgroundColor: ['#198754', '#ffc107', '#dc3545', '#6c757d'],
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'bottom' }
+    document.addEventListener('DOMContentLoaded', function () {
+        const canvas = document.getElementById('graficoEstados');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: {{ estados_labels|safe }},
+                datasets: [{
+                    data: {{ estados_data|safe }},
+                    backgroundColor: ['#198754', '#ffc107', '#dc3545', '#6c757d'],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
             }
-        }
+        });
     });
 </script>
 {% endblock %}

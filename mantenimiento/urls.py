@@ -54,4 +54,9 @@ urlpatterns = [
     path('ordenes/<int:orden_id>/editar/', views.editar_orden, name='editar_orden'),
     path('ordenes/<int:orden_id>/eliminar/', views.eliminar_orden, name='eliminar_orden'),
     path('ordenes/<int:orden_id>/cerrar/', views.cerrar_orden, name='cerrar_orden'),
+    # Gestión de incidencias (Admin y Técnico)
+    path('incidencias/gestion/', views.lista_incidencias_admin, name='lista_incidencias_admin'),
+    path('incidencias/gestion/<int:incidencia_id>/', views.detalle_incidencia, name='detalle_incidencia'),
+    path('incidencias/gestion/<int:incidencia_id>/estado/<str:nuevo_estado>/', views.cambiar_estado_incidencia, name='cambiar_estado_incidencia'),
+    path('incidencias/gestion/<int:incidencia_id>/crear-ot/', views.crear_ot_desde_incidencia, name='crear_ot_desde_incidencia'),
 ]
