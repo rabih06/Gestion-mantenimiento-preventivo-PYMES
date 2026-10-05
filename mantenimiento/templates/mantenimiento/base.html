@@ -104,7 +104,7 @@
                              </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/mantenimiento/ordentrabajo/">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_ordenes' %}">
                                 <i class="bi bi-clipboard-check"></i> Órdenes
                             </a>
                         </li>
@@ -124,9 +124,15 @@
                                 </i> Mis Órdenes</a>
                             </li>
                             <li class="nav-item">
+                                <a class="nav-link" href="{% url 'mantenimiento:lista_ordenes' %}">
+                                    <i class="bi bi-list-check"></i> Todas mis OTs
+                                </a>
+                            </li>
+                            <li class="nav-item">
                                 <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
                                     <i class="bi bi-bell">
-                                    </i> Alertas...</a>
+                                    </i> Alertas...
+                                </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">

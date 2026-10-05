@@ -1,0 +1,52 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Cerrar OT-{{ orden.id }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm border-success">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0"><i class="bi bi-check-circle"></i> Cerrar y Aprobar Orden</h4>
+            </div>
+            <div class="card-body">
+                <p class="lead">Vas a cerrar la orden <strong>OT-{{ orden.id }}</strong>.</p>
+
+                <div class="alert alert-info">
+                    <strong>Equipo:</strong> {{ orden.equipo.codigo_interno }} - {{ orden.equipo.nombre }}
+                    <br>
+                    <strong>Técnico:</strong> {{ orden.tecnico.get_full_name|default:"Sin asignar" }}
+                    <br>
+                    <strong>Duración:</strong> {{ orden.duracion_horas }} h
+                    <br>
+                    <strong>Trabajo realizado:</strong> {{ orden.descripcion_trabajo|truncatechars:120 }}
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Observaciones de cierre</strong> (opcional)</label>
+                        <textarea name="observaciones" class="form-control" rows="4"
+                                  placeholder="Ej: Trabajo verificado, equipo funcionando correctamente..."></textarea>
+                        <small class="text-muted">Quedará registrado en el historial de la orden.</small>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <i class="bi bi-info-circle"></i>
+                        Al cerrar la orden, se marcará como <strong>aprobada por el administrador</strong>.
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'mantenimiento:detalle_orden' orden.id %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check-circle"></i> Confirmar Cierre
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

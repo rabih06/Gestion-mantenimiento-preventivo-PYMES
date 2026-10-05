@@ -432,6 +432,10 @@ class OrdenRepuesto(models.Model):
     def __str__(self):
         return f"{self.orden} - {self.repuesto.nombre} x{self.cantidad_utilizada}"
 
+    @property
+    def subtotal(self):
+        return self.cantidad_utilizada * self.precio_unitario_momento
+
 
 # =====================================================
 # HISTORIAL DE ESTADOS DE EQUIPO

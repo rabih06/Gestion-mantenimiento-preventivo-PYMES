@@ -48,4 +48,10 @@ urlpatterns = [
     # Retiro de repuestos
     path('repuestos/<int:repuesto_id>/retirar/', views.retirar_repuesto, name='retirar_repuesto'),
     path('repuestos/<int:repuesto_id>/movimientos/', views.historial_movimientos, name='historial_movimientos'),
+    # Órdenes de Trabajo
+    path('ordenes/', views.lista_ordenes, name='lista_ordenes'),
+    path('ordenes/crear/', views.crear_orden, name='crear_orden'),
+    path('ordenes/<int:orden_id>/editar/', views.editar_orden, name='editar_orden'),
+    path('ordenes/<int:orden_id>/eliminar/', views.eliminar_orden, name='eliminar_orden'),
+    path('ordenes/<int:orden_id>/cerrar/', views.cerrar_orden, name='cerrar_orden'),
 ]
