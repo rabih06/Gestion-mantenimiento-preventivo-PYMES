@@ -1,0 +1,220 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Órdenes de Trabajo{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-clipboard-check"></i> Órdenes de Trabajo</h1>
+    {% if user.rol_principal == 'ADMIN' %}
+        <a href="{% url 'mantenimiento:crear_orden' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Nueva Orden
+        </a>
+    {% endif %}
+</div>
+
+<!-- Resumen -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-start border-primary border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Total</h6>
+                <h3 class="mb-0">{{ total_ordenes }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-warning border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Programadas</h6>
+                <h3 class="mb-0 text-warning">{{ programadas }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-info border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">En Progreso</h6>
+                <h3 class="mb-0 text-info">{{ en_progreso }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-start border-success border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Completadas</h6>
+                <h3 class="mb-0 text-success">{{ completadas }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Buscar</label>
+                <input type="text" name="q" class="form-control"
+                       placeholder="Descripción, equipo, técnico..." value="{{ q }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Estado</label>
+                <select name="estado" class="form-select">
+                    <option value="">Todos</option>
+                    {% for valor, etiqueta in estados %}
+                        <option value="{{ valor }}" {% if estado_filtro == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Tipo</label>
+                <select name="tipo" class="form-select">
+                    <option value="">Todos</option>
+                    {% for valor, etiqueta in tipos %}
+                        <option value="{{ valor }}" {% if tipo_filtro == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Prioridad</label>
+                <select name="prioridad" class="form-select">
+                    <option value="">Todas</option>
+                    {% for valor, etiqueta in prioridades %}
+                        <option value="{{ valor }}" {% if prioridad_filtro == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if user.rol_principal == 'ADMIN' %}
+                <div class="col-md-2">
+                    <label class="form-label">Técnico</label>
+                    <select name="tecnico" class="form-select">
+                        <option value="">Todos</option>
+                        {% for tec in tecnicos %}
+                            <option value="{{ tec.id }}" {% if tecnico_filtro == tec.id|stringformat:"s" %}selected{% endif %}>
+                                {{ tec.get_full_name|default:tec.username }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            {% endif %}
+            <div class="col-md-1 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<p class="text-muted">
+    <i class="bi bi-info-circle"></i> Mostrando {{ page_obj.start_index }}-{{ page_obj.end_index }} de {{ total_ordenes }} orden(es)
+</p>
+
+<!-- Tabla -->
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>OT</th>
+                    <th>Equipo</th>
+                    <th>Tipo</th>
+                    <th>Prioridad</th>
+                    <th>Técnico</th>
+                    <th>Estado</th>
+                    <th>Fecha Prog.</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for orden in page_obj %}
+                    <tr>
+                        <td><strong>OT-{{ orden.id }}</strong></td>
+                        <td>
+                            {{ orden.equipo.codigo_interno }}
+                            <br>
+                            <small class="text-muted">{{ orden.equipo.nombre }}</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if orden.tipo == 'PREVENTIVO' %}info{% elif orden.tipo == 'CORRECTIVO' %}warning{% else %}danger{% endif %} text-dark">
+                                {{ orden.get_tipo_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if orden.prioridad == 'CRITICA' %}danger{% elif orden.prioridad == 'ALTA' %}warning{% elif orden.prioridad == 'MEDIA' %}info{% else %}secondary{% endif %}">
+                                {{ orden.get_prioridad_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if orden.tecnico %}
+                                {{ orden.tecnico.get_full_name|default:orden.tecnico.username }}
+                            {% else %}
+                                <span class="text-muted">Sin asignar</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if orden.estado == 'COMPLETADA' %}success{% elif orden.estado == 'PROGRESO' %}primary{% elif orden.estado == 'CANCELADA' %}secondary{% else %}warning{% endif %}">
+                                {{ orden.get_estado_display }}
+                            </span>
+                            {% if orden.fecha_cierre %}
+                                <i class="bi bi-check-circle-fill text-success ms-1" title="Cerrada"></i>
+                            {% endif %}
+                        </td>
+                        <td>{{ orden.fecha_programada|date:"d/m/Y H:i" }}</td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'mantenimiento:detalle_orden' orden.id %}"
+                                   class="btn btn-outline-primary" title="Ver detalle">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if user.rol_principal == 'ADMIN' and orden.estado != 'COMPLETADA' and orden.estado != 'CANCELADA' %}
+                                    <a href="{% url 'mantenimiento:editar_orden' orden.id %}"
+                                       class="btn btn-outline-warning" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                {% endif %}
+                                {% if user.rol_principal == 'ADMIN' and orden.estado == 'COMPLETADA' and not orden.fecha_cierre %}
+                                    <a href="{% url 'mantenimiento:cerrar_orden' orden.id %}"
+                                       class="btn btn-outline-success" title="Cerrar y aprobar">
+                                        <i class="bi bi-check-circle"></i>
+                                    </a>
+                                {% endif %}
+                                {% if user.rol_principal == 'ADMIN' and orden.estado != 'COMPLETADA' %}
+                                    <a href="{% url 'mantenimiento:eliminar_orden' orden.id %}"
+                                       class="btn btn-outline-danger" title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No hay órdenes que coincidan con los filtros.</p>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+        <div class="card-footer bg-white">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item"><a class="page-link" href="?page=1&{{ query_params }}"><i class="bi bi-chevron-double-left"></i></a></li>
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ query_params }}">Anterior</a></li>
+                    {% endif %}
+                    <li class="page-item active"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+                    {% if page_obj.has_next %}
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ query_params }}">Siguiente</a></li>
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ query_params }}"><i class="bi bi-chevron-double-right"></i></a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

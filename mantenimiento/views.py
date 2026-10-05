@@ -8,12 +8,12 @@ from django.utils import timezone
 
 from .models import (
     Equipo, CategoriaEquipo, User, Alerta,
-    Repuesto, Proveedor, OrdenTrabajo, Incidencia, PlanMantenimiento, MovimientoRepuesto
+    Repuesto, Proveedor, OrdenTrabajo, Incidencia, PlanMantenimiento, MovimientoRepuesto, OrdenRepuesto
 )
 
 from .forms import (
     IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm, ProveedorForm, PlanMantenimientoForm,
-    RetirarRepuestoForm
+    RetirarRepuestoForm, OrdenTrabajoForm, OrdenRepuestoFormSet
 )
 
 def login_view(request):
@@ -1270,3 +1270,249 @@ def historial_movimientos(request, repuesto_id):
         'total_movimientos': movimientos.count(),
     }
     return render(request, 'mantenimiento/repuestos/historial_movimientos.html', context)
+# =====================================================
+# CRUD DE ÓRDENES DE TRABAJO
+# =====================================================
+
+@login_required
+def lista_ordenes(request):
+    """Lista de órdenes de trabajo con filtros."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver las órdenes.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    ordenes = OrdenTrabajo.objects.select_related(
+        'equipo', 'tecnico', 'incidencia', 'plan'
+    ).all()
+
+    # ✅ Técnico: solo ve sus propias órdenes
+    if request.user.rol_principal == 'TECNICO':
+        ordenes = ordenes.filter(tecnico=request.user)
+
+    # Búsqueda
+    q = request.GET.get('q', '').strip()
+    if q:
+        ordenes = ordenes.filter(
+            Q(descripcion_trabajo__icontains=q) |
+            Q(equipo__codigo_interno__icontains=q) |
+            Q(equipo__nombre__icontains=q) |
+            Q(tecnico__first_name__icontains=q) |
+            Q(tecnico__last_name__icontains=q)
+        )
+
+    # Filtros
+    estado_filtro = request.GET.get('estado', '')
+    if estado_filtro:
+        ordenes = ordenes.filter(estado=estado_filtro)
+
+    tipo_filtro = request.GET.get('tipo', '')
+    if tipo_filtro:
+        ordenes = ordenes.filter(tipo=tipo_filtro)
+
+    prioridad_filtro = request.GET.get('prioridad', '')
+    if prioridad_filtro:
+        ordenes = ordenes.filter(prioridad=prioridad_filtro)
+
+    tecnico_filtro = request.GET.get('tecnico', '')
+    if tecnico_filtro and request.user.rol_principal == 'ADMIN':
+        ordenes = ordenes.filter(tecnico_id=tecnico_filtro)
+
+    equipo_filtro = request.GET.get('equipo', '')
+    if equipo_filtro:
+        ordenes = ordenes.filter(equipo_id=equipo_filtro)
+
+    # Ordenamiento
+    orden = request.GET.get('orden', '-fecha_programada')
+    ordenes = ordenes.order_by(orden)
+
+    # Paginación
+    paginator = Paginator(ordenes, 15)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Contadores
+    base_qs = OrdenTrabajo.objects.all()
+    if request.user.rol_principal == 'TECNICO':
+        base_qs = base_qs.filter(tecnico=request.user)
+
+    total_ordenes = base_qs.count()
+    programadas = base_qs.filter(estado='PROGRAMADA').count()
+    en_progreso = base_qs.filter(estado='PROGRESO').count()
+    completadas = base_qs.filter(estado='COMPLETADA').count()
+
+    # Query params
+    query_params = request.GET.copy()
+    if 'page' in query_params:
+        del query_params['page']
+
+    context = {
+        'page_obj': page_obj,
+        'q': q,
+        'estado_filtro': estado_filtro,
+        'tipo_filtro': tipo_filtro,
+        'prioridad_filtro': prioridad_filtro,
+        'tecnico_filtro': tecnico_filtro,
+        'equipo_filtro': equipo_filtro,
+        'orden': orden,
+        'estados': OrdenTrabajo.ESTADO_CHOICES,
+        'tipos': OrdenTrabajo.TIPO_CHOICES,
+        'prioridades': OrdenTrabajo.PRIORIDAD_CHOICES,
+        'tecnicos': User.objects.filter(rol_principal='TECNICO', is_active=True),
+        'equipos': Equipo.objects.all().order_by('codigo_interno'),
+        'query_params': query_params.urlencode(),
+        'total_ordenes': total_ordenes,
+        'programadas': programadas,
+        'en_progreso': en_progreso,
+        'completadas': completadas,
+    }
+    return render(request, 'mantenimiento/ordenes/lista_ordenes.html', context)
+
+
+@login_required
+def detalle_orden(request, orden_id):
+    """Vista detallada de una orden con posibilidad de añadir repuestos."""
+    if request.user.rol_principal not in ['TECNICO', 'ADMIN']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    orden = get_object_or_404(OrdenTrabajo, id=orden_id)
+
+    # Técnicos solo ven sus propias órdenes
+    if request.user.rol_principal == 'TECNICO' and orden.tecnico != request.user:
+        messages.error(request, 'No tienes permiso para ver esta orden.')
+        return redirect('mantenimiento:lista_ordenes')
+
+    # Formset de repuestos usados (solo si la orden está activa)
+    puede_editar_repuestos = orden.estado in ['PROGRAMADA', 'PROGRESO']
+
+    if request.method == 'POST' and puede_editar_repuestos:
+        formset = OrdenRepuestoFormSet(request.POST, instance=orden)
+        if formset.is_valid():
+            formset.save()
+            messages.success(request, '✅ Repuestos actualizados.')
+            return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+    else:
+        formset = OrdenRepuestoFormSet(instance=orden)
+
+    # Repuestos usados y disponibles
+    repuestos_usados = orden.repuestos_usados.select_related('repuesto')
+    repuestos_disponibles = Repuesto.objects.filter(cantidad_actual__gt=0)
+
+    context = {
+        'orden': orden,
+        'formset': formset,
+        'repuestos_usados': repuestos_usados,
+        'repuestos_disponibles': repuestos_disponibles,
+        'puede_editar_repuestos': puede_editar_repuestos,
+    }
+    return render(request, 'mantenimiento/ordenes/detalle_orden.html', context)
+
+
+@login_required
+def crear_orden(request):
+    """Crear una nueva orden de trabajo (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden crear órdenes.')
+        return redirect('mantenimiento:lista_ordenes')
+
+    if request.method == 'POST':
+        form = OrdenTrabajoForm(request.POST)
+        if form.is_valid():
+            orden = form.save()
+            messages.success(request, f'✅ Orden OT-{orden.id} creada correctamente.')
+            return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+    else:
+        # Pre-seleccionar equipo/incidencia si vienen por query string
+        initial = {}
+        if request.GET.get('equipo'):
+            initial['equipo'] = request.GET.get('equipo')
+        if request.GET.get('incidencia'):
+            initial['incidencia'] = request.GET.get('incidencia')
+        form = OrdenTrabajoForm(initial=initial)
+
+    return render(request, 'mantenimiento/ordenes/form_orden.html', {
+        'form': form,
+        'titulo': 'Crear Nueva Orden de Trabajo',
+        'accion': 'Crear Orden',
+    })
+
+
+@login_required
+def editar_orden(request, orden_id):
+    """Editar una orden (solo ADMIN, y solo si no está completada/cancelada)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden editar órdenes.')
+        return redirect('mantenimiento:lista_ordenes')
+
+    orden = get_object_or_404(OrdenTrabajo, id=orden_id)
+
+    if orden.estado in ['COMPLETADA', 'CANCELADA']:
+        messages.error(request, f'No puedes editar una orden en estado "{orden.get_estado_display()}".')
+        return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+
+    if request.method == 'POST':
+        form = OrdenTrabajoForm(request.POST, instance=orden)
+        if form.is_valid():
+            orden = form.save()
+            messages.success(request, f'✅ Orden OT-{orden.id} actualizada.')
+            return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+    else:
+        form = OrdenTrabajoForm(instance=orden)
+
+    return render(request, 'mantenimiento/ordenes/form_orden.html', {
+        'form': form,
+        'orden': orden,
+        'titulo': f'Editar: OT-{orden.id}',
+        'accion': 'Guardar Cambios',
+    })
+
+
+@login_required
+def eliminar_orden(request, orden_id):
+    """Eliminar una orden (solo ADMIN y solo si no está completada)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden eliminar órdenes.')
+        return redirect('mantenimiento:lista_ordenes')
+
+    orden = get_object_or_404(OrdenTrabajo, id=orden_id)
+
+    if orden.estado == 'COMPLETADA':
+        messages.error(request, 'No puedes eliminar una orden completada. Es parte del historial.')
+        return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+
+    if request.method == 'POST':
+        orden_id_ant = orden.id
+        orden.delete()
+        messages.success(request, f'Orden OT-{orden_id_ant} eliminada correctamente.')
+        return redirect('mantenimiento:lista_ordenes')
+
+    return render(request, 'mantenimiento/ordenes/confirmar_eliminar.html', {'orden': orden})
+
+
+@login_required
+def cerrar_orden(request, orden_id):
+    """Cerrar y aprobar una orden completada (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden cerrar órdenes.')
+        return redirect('mantenimiento:lista_ordenes')
+
+    orden = get_object_or_404(OrdenTrabajo, id=orden_id)
+
+    if orden.estado != 'COMPLETADA':
+        messages.error(request, 'Solo puedes cerrar órdenes que estén completadas.')
+        return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+
+    if orden.fecha_cierre:
+        messages.warning(request, 'Esta orden ya fue cerrada anteriormente.')
+        return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+
+    if request.method == 'POST':
+        observaciones = request.POST.get('observaciones', '').strip()
+
+        orden.fecha_cierre = timezone.now()
+        orden.observaciones_cierre = observaciones
+        orden.save()
+
+        messages.success(request, f'✅ Orden OT-{orden.id} cerrada y aprobada.')
+        return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+
+    return render(request, 'mantenimiento/ordenes/cerrar_orden.html', {'orden': orden})

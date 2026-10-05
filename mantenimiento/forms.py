@@ -2,7 +2,7 @@ from django import forms
 from django.forms import inlineformset_factory, TextInput
 from .models import (
     Incidencia, Equipo, User, AtributoEquipo,
-    Repuesto, Proveedor, PlanMantenimiento, MovimientoRepuesto
+    Repuesto, Proveedor, PlanMantenimiento,OrdenTrabajo, OrdenRepuesto
 )
 
 
@@ -362,3 +362,105 @@ class RetirarRepuestoForm(forms.Form):
                 f'❌ Solo hay {self.repuesto.cantidad_actual} {self.repuesto.unidad_medida}(s) disponibles.'
             )
         return cantidad
+# =====================================================
+# FORMULARIO DE ORDEN DE TRABAJO
+# =====================================================
+class OrdenTrabajoForm(forms.ModelForm):
+    """Formulario para crear y editar órdenes de trabajo."""
+
+    class Meta:
+        model = OrdenTrabajo
+        fields = [
+            'equipo', 'tecnico', 'incidencia', 'plan',
+            'tipo', 'prioridad', 'fecha_programada',
+            'descripcion_trabajo',
+        ]
+        widgets = {
+            'equipo': forms.Select(attrs={'class': 'form-select'}),
+            'tecnico': forms.Select(attrs={'class': 'form-select'}),
+            'incidencia': forms.Select(attrs={'class': 'form-select'}),
+            'plan': forms.Select(attrs={'class': 'form-select'}),
+            'tipo': forms.Select(attrs={'class': 'form-select'}),
+            'prioridad': forms.Select(attrs={'class': 'form-select'}),
+            'fecha_programada': forms.DateTimeInput(
+                attrs={'class': 'form-control', 'type': 'datetime-local'}
+            ),
+            'descripcion_trabajo': forms.Textarea(
+                attrs={'class': 'form-control', 'rows': 4}
+            ),
+        }
+        labels = {
+            'equipo': 'Equipo *',
+            'tecnico': 'Técnico asignado',
+            'incidencia': 'Incidencia origen',
+            'plan': 'Plan de mantenimiento',
+            'tipo': 'Tipo de trabajo *',
+            'prioridad': 'Prioridad *',
+            'fecha_programada': 'Fecha programada *',
+            'descripcion_trabajo': 'Descripción del trabajo *',
+        }
+        help_texts = {
+            'equipo': 'Equipo al que se le realizará el mantenimiento.',
+            'tecnico': 'Técnico responsable de ejecutar la orden.',
+            'incidencia': 'Si la OT nace de un reporte de falla, selecciónala aquí.',
+            'plan': 'Si la OT viene de un plan preventivo, selecciónalo aquí.',
+            'descripcion_trabajo': 'Detalla las tareas a realizar.',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Filtrar técnicos activos
+        self.fields['tecnico'].queryset = User.objects.filter(
+            rol_principal='TECNICO', is_active=True
+        ).order_by('first_name', 'last_name', 'username')
+        self.fields['tecnico'].required = False
+
+        # Solo incidencias pendientes o en revisión
+        self.fields['incidencia'].queryset = Incidencia.objects.filter(
+            estado__in=['PENDIENTE', 'REVISION']
+        ).order_by('-fecha_reporte')
+        self.fields['incidencia'].required = False
+
+        # Solo planes activos
+        self.fields['plan'].queryset = PlanMantenimiento.objects.filter(
+            is_active=True
+        ).order_by('equipo__codigo_interno', 'nombre')
+        self.fields['plan'].required = False
+
+        # Si estamos editando, incluir el técnico actual por si está inactivo
+        if self.instance.pk and self.instance.tecnico:
+            tecnicos_qs = self.fields['tecnico'].queryset
+            self.fields['tecnico'].queryset = (tecnicos_qs | User.objects.filter(pk=self.instance.tecnico.pk)).distinct()
+
+    def clean(self):
+        cleaned = super().clean()
+        equipo = cleaned.get('equipo')
+        incidencia = cleaned.get('incidencia')
+        plan = cleaned.get('plan')
+
+        # Validar que la incidencia sea del mismo equipo si se selecciona
+        if incidencia and equipo and incidencia.equipo != equipo:
+            self.add_error('incidencia', 'La incidencia seleccionada no corresponde al equipo elegido.')
+
+        # Validar que el plan sea del mismo equipo si se selecciona
+        if plan and equipo and plan.equipo != equipo:
+            self.add_error('plan', 'El plan seleccionado no corresponde al equipo elegido.')
+
+        return cleaned
+
+
+# =====================================================
+# FORMSET DE REPUESTOS USADOS EN UNA ORDEN
+# =====================================================
+OrdenRepuestoFormSet = inlineformset_factory(
+    OrdenTrabajo,
+    OrdenRepuesto,
+    fields=['repuesto', 'cantidad_utilizada'],
+    extra=1,
+    can_delete=True,
+    widgets={
+        'repuesto': forms.Select(attrs={'class': 'form-select'}),
+        'cantidad_utilizada': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+    },
+)

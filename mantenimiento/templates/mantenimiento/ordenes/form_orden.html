@@ -1,0 +1,92 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-clipboard-check"></i> {{ titulo }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="row">
+                        <!-- Equipo -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.equipo.label }}</label>
+                            {{ form.equipo }}
+                            <small class="text-muted">{{ form.equipo.help_text }}</small>
+                            {% if form.equipo.errors %}<div class="text-danger small">{{ form.equipo.errors }}</div>{% endif %}
+                        </div>
+
+                        <!-- Técnico -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.tecnico.label }}</label>
+                            {{ form.tecnico }}
+                            <small class="text-muted">{{ form.tecnico.help_text }}</small>
+                            {% if form.tecnico.errors %}<div class="text-danger small">{{ form.tecnico.errors }}</div>{% endif %}
+                        </div>
+
+                        <!-- Tipo y Prioridad -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.tipo.label }}</label>
+                            {{ form.tipo }}
+                            {% if form.tipo.errors %}<div class="text-danger small">{{ form.tipo.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.prioridad.label }}</label>
+                            {{ form.prioridad }}
+                            {% if form.prioridad.errors %}<div class="text-danger small">{{ form.prioridad.errors }}</div>{% endif %}
+                        </div>
+
+                        <!-- Fecha programada -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.fecha_programada.label }}</label>
+                            {{ form.fecha_programada }}
+                            {% if form.fecha_programada.errors %}<div class="text-danger small">{{ form.fecha_programada.errors }}</div>{% endif %}
+                        </div>
+
+                        <!-- Incidencia origen -->
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.incidencia.label }}</label>
+                            {{ form.incidencia }}
+                            <small class="text-muted">{{ form.incidencia.help_text }}</small>
+                            {% if form.incidencia.errors %}<div class="text-danger small">{{ form.incidencia.errors }}</div>{% endif %}
+                        </div>
+
+                        <!-- Plan origen -->
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">{{ form.plan.label }}</label>
+                            {{ form.plan }}
+                            <small class="text-muted">{{ form.plan.help_text }}</small>
+                            {% if form.plan.errors %}<div class="text-danger small">{{ form.plan.errors }}</div>{% endif %}
+                        </div>
+
+                        <!-- Descripción -->
+                        <div class="col-12 mb-3">
+                            <label class="form-label">{{ form.descripcion_trabajo.label }}</label>
+                            {{ form.descripcion_trabajo }}
+                            {% if form.descripcion_trabajo.errors %}<div class="text-danger small">{{ form.descripcion_trabajo.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'mantenimiento:lista_ordenes' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> {{ accion }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,257 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}OT-{{ orden.id }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="bi bi-clipboard-check"></i> Orden de Trabajo #{{ orden.id }}</h1>
+        <p class="text-muted mb-0">
+            <span class="badge bg-{% if orden.tipo == 'PREVENTIVO' %}info{% elif orden.tipo == 'CORRECTIVO' %}warning{% else %}danger{% endif %} text-dark">
+                {{ orden.get_tipo_display }}
+            </span>
+            <span class="badge bg-{% if orden.prioridad == 'CRITICA' %}danger{% elif orden.prioridad == 'ALTA' %}warning{% else %}info{% endif %}">
+                {{ orden.get_prioridad_display }}
+            </span>
+            <span class="badge bg-{% if orden.estado == 'COMPLETADA' %}success{% elif orden.estado == 'PROGRESO' %}primary{% elif orden.estado == 'CANCELADA' %}secondary{% else %}warning{% endif %}">
+                {{ orden.get_estado_display }}
+            </span>
+            {% if orden.fecha_cierre %}
+                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Cerrada</span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mantenimiento:lista_ordenes' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        {% if user.rol_principal == 'ADMIN' and orden.estado != 'COMPLETADA' and orden.estado != 'CANCELADA' %}
+            <a href="{% url 'mantenimiento:editar_orden' orden.id %}" class="btn btn-warning">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+        {% endif %}
+        {% if user.rol_principal == 'ADMIN' and orden.estado == 'COMPLETADA' and not orden.fecha_cierre %}
+            <a href="{% url 'mantenimiento:cerrar_orden' orden.id %}" class="btn btn-success">
+                <i class="bi bi-check-circle"></i> Cerrar y Aprobar
+            </a>
+        {% endif %}
+        {% if user.rol_principal == 'ADMIN' and orden.estado != 'COMPLETADA' %}
+            <a href="{% url 'mantenimiento:eliminar_orden' orden.id %}" class="btn btn-danger">
+                <i class="bi bi-trash"></i> Eliminar
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Observaciones de cierre (si ya está cerrada) -->
+{% if orden.fecha_cierre %}
+<div class="alert alert-success">
+    <h5 class="alert-heading"><i class="bi bi-check-circle"></i> Orden Cerrada</h5>
+    <p class="mb-1"><strong>Fecha de cierre:</strong> {{ orden.fecha_cierre|date:"d/m/Y H:i" }}</p>
+    {% if orden.observaciones_cierre %}
+        <p class="mb-0"><strong>Observaciones:</strong> {{ orden.observaciones_cierre }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- Columna izquierda -->
+    <div class="col-md-8">
+        <!-- Descripción -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-card-text"></i> Descripción del Trabajo</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0" style="white-space: pre-line;">{{ orden.descripcion_trabajo }}</p>
+            </div>
+        </div>
+
+        <!-- Repuestos usados -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-box-seam"></i> Repuestos Utilizados</h5>
+                <span class="badge bg-secondary">{{ repuestos_usados|length }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Repuesto</th>
+                            <th>SKU</th>
+                            <th>Cantidad</th>
+                            <th>Precio unit.</th>
+                            <th>Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for or in repuestos_usados %}
+                            <tr>
+                                <td>{{ or.repuesto.nombre }}</td>
+                                <td><code>{{ or.repuesto.codigo_sku }}</code></td>
+                                <td><strong>{{ or.cantidad_utilizada }}</strong></td>
+                                <td>
+                                    {% if user.rol_principal == 'ADMIN' %}
+                                        ${{ or.precio_unitario_momento }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user.rol_principal == 'ADMIN' %}
+                                        ${{ or.subtotal|floatformat:2 }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    No hay repuestos registrados en esta orden.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Formset para añadir repuestos (si la OT está activa) -->
+            {% if puede_editar_repuestos and user.rol_principal in 'ADMIN TECNICO' %}
+                <div class="card-footer bg-white">
+                    <h6 class="mb-3"><i class="bi bi-plus-circle"></i> Añadir / Editar Repuestos</h6>
+                    <form method="post">
+                        {% csrf_token %}
+                        {{ formset.management_form }}
+
+                        {% if formset.non_form_errors %}
+                            <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
+                        {% endif %}
+
+                        {% for form in formset %}
+                            <div class="row g-2 mb-2 align-items-center">
+                                {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                                <div class="col-md-5">
+                                    {{ form.repuesto }}
+                                    {% if form.repuesto.errors %}<div class="text-danger small">{{ form.repuesto.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-3">
+                                    {{ form.cantidad_utilizada }}
+                                    {% if form.cantidad_utilizada.errors %}<div class="text-danger small">{{ form.cantidad_utilizada.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-3">
+                                    {% if form.DELETE %}
+                                        <div class="form-check">
+                                            {{ form.DELETE }}
+                                            <label class="form-check-label small text-danger">Eliminar</label>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+
+                        <button type="submit" class="btn btn-sm btn-primary mt-2">
+                            <i class="bi bi-save"></i> Guardar Repuestos
+                        </button>
+                    </form>
+                </div>
+            {% endif %}
+        </div>
+
+        {% if orden.incidencia %}
+        <div class="card shadow-sm mb-4 border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Incidencia Origen</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Reportado por:</strong> {{ orden.incidencia.operario.get_full_name|default:orden.incidencia.operario.username }}</p>
+                <p><strong>Fecha:</strong> {{ orden.incidencia.fecha_reporte|date:"d/m/Y H:i" }}</p>
+                <p><strong>Prioridad:</strong> {{ orden.incidencia.get_prioridad_display }}</p>
+                <p class="mb-0"><strong>Descripción:</strong> {{ orden.incidencia.descripcion_falla }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Columna derecha -->
+    <div class="col-md-4">
+        <!-- Info de la orden -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Información</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Programada</span>
+                    <strong>{{ orden.fecha_programada|date:"d/m/Y H:i" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Inicio</span>
+                    <strong>{{ orden.fecha_inicio|date:"d/m/Y H:i"|default:"No iniciada" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Fin</span>
+                    <strong>{{ orden.fecha_fin|date:"d/m/Y H:i"|default:"No finalizada" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Duración</span>
+                    <strong>{{ orden.duracion_horas }} h</strong>
+                </li>
+                {% if user.rol_principal == 'ADMIN' %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Costo total</span>
+                        <strong>${{ orden.costo_total }}</strong>
+                    </li>
+                {% endif %}
+            </ul>
+        </div>
+
+        <!-- Equipo -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-cpu"></i> Equipo</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>{{ orden.equipo.codigo_interno }}</strong><br>
+                <small class="text-muted">{{ orden.equipo.nombre }}</small></p>
+                <p class="mb-1"><strong>Marca:</strong> {{ orden.equipo.marca|default:"-" }}</p>
+                <p class="mb-1"><strong>Modelo:</strong> {{ orden.equipo.modelo|default:"-" }}</p>
+                <p class="mb-0">
+                    <strong>Estado:</strong>
+                    <span class="badge bg-{% if orden.equipo.estado_operativo == 'ACTIVO' %}success{% elif orden.equipo.estado_operativo == 'MANTENIMIENTO' %}warning{% else %}danger{% endif %}">
+                        {{ orden.equipo.get_estado_operativo_display }}
+                    </span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Técnico asignado -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-person-badge"></i> Técnico Asignado</h5>
+            </div>
+            <div class="card-body">
+                {% if orden.tecnico %}
+                    <p class="mb-1"><strong>{{ orden.tecnico.get_full_name|default:orden.tecnico.username }}</strong></p>
+                    <p class="mb-0 text-muted small">{{ orden.tecnico.email|default:"" }}</p>
+                {% else %}
+                    <p class="mb-0 text-muted">Sin asignar</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Plan origen -->
+        {% if orden.plan %}
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-calendar-event"></i> Plan Origen</h5>
+            </div>
+            <div class="card-body">
+                <a href="{% url 'mantenimiento:detalle_plan' orden.plan.id %}">
+                    {{ orden.plan.nombre }}
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
