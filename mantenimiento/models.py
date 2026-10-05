@@ -58,7 +58,22 @@ class Proveedor(models.Model):
 # REPUESTOS
 # =====================================================
 class Repuesto(models.Model):
+    TIPO_CHOICES = [
+        ('REPUESTO', 'Repuesto'),
+        ('FILTRO', 'Filtro'),
+        ('CONSUMIBLE', 'Consumible'),
+        ('LUBRICANTE', 'Lubricante'),
+        ('HERRAMIENTA', 'Herramienta'),
+        ('SEGURIDAD', 'Equipo de seguridad'),
+        ('OTRO', 'Otro'),
+    ]
     nombre = models.CharField(max_length=150)
+    tipo = models.CharField(
+        max_length=20,
+        choices=TIPO_CHOICES,
+        default='REPUESTO',
+        help_text="Categoría del repuesto"
+    )
     codigo_sku = models.CharField(max_length=50, unique=True)
     descripcion = models.TextField(blank=True, null=True)
     cantidad_actual = models.IntegerField(default=0, validators=[MinValueValidator(0)])
@@ -528,3 +543,47 @@ class AtributoEquipo(models.Model):
 
     def __str__(self):
         return f"{self.equipo.codigo_interno} - {self.nombre}: {self.valor} {self.unidad or ''}"
+
+# =====================================================
+# MOVIMIENTOS DE REPUESTOS (Auditoría)
+# =====================================================
+class MovimientoRepuesto(models.Model):
+    TIPO_CHOICES = [
+        ('ENTRADA', 'Entrada'),
+        ('SALIDA', 'Salida'),
+        ('AJUSTE', 'Ajuste'),
+    ]
+
+    repuesto = models.ForeignKey(
+        Repuesto,
+        on_delete=models.CASCADE,
+        related_name='movimientos'
+    )
+    tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
+    cantidad = models.IntegerField(validators=[MinValueValidator(1)])
+    cantidad_anterior = models.IntegerField()
+    cantidad_nueva = models.IntegerField()
+    motivo = models.TextField(blank=True, null=True)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='movimientos_repuestos'
+    )
+    orden = models.ForeignKey(
+        'OrdenTrabajo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='movimientos_repuestos'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'movimientos_repuesto'
+        verbose_name = 'Movimiento de Repuesto'
+        verbose_name_plural = 'Movimientos de Repuestos'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} - {self.repuesto.nombre} x{self.cantidad}"

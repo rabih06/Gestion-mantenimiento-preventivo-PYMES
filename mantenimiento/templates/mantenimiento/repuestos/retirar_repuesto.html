@@ -1,0 +1,82 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Retirar Repuesto{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-warning text-dark">
+                <h4 class="mb-0"><i class="bi bi-box-arrow-up"></i> Retirar del Inventario</h4>
+            </div>
+            <div class="card-body">
+                <!-- Info del repuesto -->
+                <div class="alert alert-info">
+                    <strong>{{ repuesto.codigo_sku }}</strong> - {{ repuesto.nombre }}
+                    <br>
+                    <small>
+                        <strong>Stock disponible:</strong> {{ repuesto.cantidad_actual }} {{ repuesto.unidad_medida }}
+                        {% if repuesto.ubicacion_almacen %}
+                            <br><strong>Ubicación:</strong> {{ repuesto.ubicacion_almacen }}
+                        {% endif %}
+                    </small>
+                </div>
+
+                {% if repuesto.cantidad_actual == 0 %}
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle"></i>
+                        <strong>Sin stock:</strong> No puedes retirar este repuesto porque está agotado.
+                    </div>
+                    <a href="{% url 'mantenimiento:detalle_repuesto' repuesto.id %}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Volver al detalle
+                    </a>
+                {% else %}
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">{{ form.cantidad.label }}</label>
+                                {{ form.cantidad }}
+                                {% if form.cantidad.errors %}
+                                    <div class="text-danger small">{{ form.cantidad.errors }}</div>
+                                {% endif %}
+                                <small class="text-muted">
+                                    Máximo: {{ repuesto.cantidad_actual }} {{ repuesto.unidad_medida }}
+                                </small>
+                            </div>
+
+                            <div class="col-12 mb-3">
+                                <label class="form-label">{{ form.motivo.label }}</label>
+                                {{ form.motivo }}
+                                <small class="text-muted">
+                                    Explica para qué se usará este repuesto (queda en el historial).
+                                </small>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Esta acción <strong>descontará el stock</strong> y quedará registrada
+                            en el historial de movimientos.
+                        </div>
+
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{% url 'mantenimiento:detalle_repuesto' repuesto.id %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-warning"
+                                    onclick="return confirm('¿Confirmas retirar esta cantidad del inventario?')">
+                                <i class="bi bi-box-arrow-up"></i> Confirmar Retiro
+                            </button>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

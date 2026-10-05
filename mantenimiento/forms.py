@@ -2,7 +2,7 @@ from django import forms
 from django.forms import inlineformset_factory, TextInput
 from .models import (
     Incidencia, Equipo, User, AtributoEquipo,
-    Repuesto, Proveedor, PlanMantenimiento
+    Repuesto, Proveedor, PlanMantenimiento, MovimientoRepuesto
 )
 
 
@@ -319,3 +319,46 @@ class PlanMantenimientoForm(forms.ModelForm):
             )
 
         return cleaned
+
+# =====================================================
+# FORMULARIO PARA RETIRAR REPUESTOS DEL INVENTARIO
+# =====================================================
+class RetirarRepuestoForm(forms.Form):
+    """Formulario para que técnicos registren la salida de repuestos."""
+
+    cantidad = forms.IntegerField(
+        min_value=1,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': 1,
+            'placeholder': 'Ej: 2',
+        }),
+        label='Cantidad a retirar *',
+    )
+    motivo = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': 'Ej: Cambio de aceite en el torno CNC',
+        }),
+        label='Motivo de la salida',
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.repuesto = kwargs.pop('repuesto', None)
+        super().__init__(*args, **kwargs)
+
+    def clean_cantidad(self):
+        cantidad = self.cleaned_data.get('cantidad', 0)
+        if not self.repuesto:
+            return cantidad
+        if self.repuesto.cantidad_actual == 0:
+            raise forms.ValidationError(
+                f'❌ No puedes retirar: "{self.repuesto.nombre}" está sin stock.'
+            )
+        if cantidad > self.repuesto.cantidad_actual:
+            raise forms.ValidationError(
+                f'❌ Solo hay {self.repuesto.cantidad_actual} {self.repuesto.unidad_medida}(s) disponibles.'
+            )
+        return cantidad

@@ -1,0 +1,74 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Movimientos de {{ repuesto.nombre }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-clock-history"></i> Movimientos del Repuesto</h1>
+    <a href="{% url 'mantenimiento:detalle_repuesto' repuesto.id %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Volver al detalle
+    </a>
+</div>
+
+<div class="alert alert-info">
+    <strong>{{ repuesto.codigo_sku }}</strong> - {{ repuesto.nombre }}
+    <br>
+    <small>Stock actual: <strong>{{ repuesto.cantidad_actual }} {{ repuesto.unidad_medida }}</strong></small>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-list-check"></i> Historial</h5>
+        <span class="badge bg-secondary">{{ total_movimientos }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Antes</th>
+                    <th>Después</th>
+                    <th>Usuario</th>
+                    <th>Motivo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mov in movimientos %}
+                    <tr>
+                        <td>{{ mov.created_at|date:"d/m/Y H:i" }}</td>
+                        <td>
+                            <span class="badge bg-{% if mov.tipo == 'ENTRADA' %}success{% elif mov.tipo == 'SALIDA' %}warning{% else %}info{% endif %}">
+                                {{ mov.get_tipo_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <strong class="{% if mov.tipo == 'SALIDA' %}text-danger{% else %}text-success{% endif %}">
+                                {% if mov.tipo == 'SALIDA' %}-{% else %}+{% endif %}{{ mov.cantidad }}
+                            </strong>
+                        </td>
+                        <td>{{ mov.cantidad_anterior }}</td>
+                        <td>{{ mov.cantidad_nueva }}</td>
+                        <td>
+                            {% if mov.usuario %}
+                                {{ mov.usuario.get_full_name|default:mov.usuario.username }}
+                            {% else %}
+                                <span class="text-muted">Sistema</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="text-muted">{{ mov.motivo|default:"-"|truncatechars:60 }}</small>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            Este repuesto no tiene movimientos registrados.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

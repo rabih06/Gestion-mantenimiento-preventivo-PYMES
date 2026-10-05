@@ -35,12 +35,12 @@
 <div class="card shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label">Buscar</label>
-                <input type="text" name="q" class="form-control" 
+                <input type="text" name="q" class="form-control"
                        placeholder="Código SKU, nombre..." value="{{ q }}">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Proveedor</label>
                 <select name="proveedor" class="form-select">
                     <option value="">Todos</option>
@@ -51,7 +51,18 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <label class="form-label">Tipo</label>
+                <select name="tipo" class="form-select">
+                    <option value="">Todos</option>
+                    {% for valor, etiqueta in tipos_repuesto %}
+                        <option value="{{ valor }}" {% if tipo_filtro == valor %}selected{% endif %}>
+                            {{ etiqueta }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Stock</label>
                 <select name="stock" class="form-select">
                     <option value="">Todos</option>
@@ -59,7 +70,7 @@
                     <option value="normal" {% if stock_filtro == 'normal' %}selected{% endif %}>Stock normal</option>
                 </select>
             </div>
-            <div class="col-md-2 d-flex align-items-end gap-2">
+            <div class="col-md-3 d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-primary flex-fill">
                     <i class="bi bi-search"></i> Filtrar
                 </button>
@@ -84,6 +95,7 @@
                 <tr>
                     <th>SKU</th>
                     <th>Nombre</th>
+                    <th>Tipo</th>
                     <th>Proveedor</th>
                     <th>Stock</th>
                     <th>Precio Unit.</th>
@@ -96,30 +108,60 @@
                     <tr class="{% if rep.stock_bajo %}table-danger{% endif %}">
                         <td><strong>{{ rep.codigo_sku }}</strong></td>
                         <td>{{ rep.nombre }}</td>
-                        <td>{{ rep.proveedor.nombre|default:"-" }}</td>
+                        <td>
+                            <span class="badge bg-secondary">{{ rep.get_tipo_display }}</span>
+                        </td>
+                        <td>
+                            {% if user.rol_principal == 'ADMIN' %}
+                                {{ rep.proveedor.nombre|default:"-" }}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
                         <td>
                             <strong>{{ rep.cantidad_actual }}</strong> {{ rep.unidad_medida }}
                             {% if rep.stock_bajo %}
-                                <i class="bi bi-exclamation-triangle-fill text-danger ms-1" 
+                                <i class="bi bi-exclamation-triangle-fill text-danger ms-1"
                                    title="Stock por debajo del mínimo ({{ rep.stock_minimo }})"></i>
                             {% endif %}
                         </td>
-                        <td>${{ rep.precio_unitario }}</td>
+                        <td>
+                            {% if user.rol_principal == 'ADMIN' %}
+                                ${{ rep.precio_unitario }}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
                         <td>{{ rep.ubicacion_almacen|default:"-" }}</td>
                         <td class="text-end">
                             <div class="btn-group btn-group-sm">
-                                <a href="{% url 'mantenimiento:detalle_repuesto' rep.id %}" 
+                                <!-- Ver detalle: todos -->
+                                <a href="{% url 'mantenimiento:detalle_repuesto' rep.id %}"
                                    class="btn btn-outline-primary" title="Ver detalle">
                                     <i class="bi bi-eye"></i>
                                 </a>
+
+                                <!-- Retirar: Admin y Técnico, solo si hay stock -->
                                 {% if user.rol_principal == 'ADMIN' or user.rol_principal == 'TECNICO' %}
-                                    <a href="{% url 'mantenimiento:editar_repuesto' rep.id %}" 
-                                       class="btn btn-outline-warning" title="Editar">
+                                    {% if rep.cantidad_actual > 0 %}
+                                        <a href="{% url 'mantenimiento:retirar_repuesto' rep.id %}"
+                                           class="btn btn-outline-warning" title="Retirar del inventario">
+                                            <i class="bi bi-box-arrow-up"></i>
+                                        </a>
+                                    {% endif %}
+                                {% endif %}
+
+                                <!-- Editar: SOLO Admin -->
+                                {% if user.rol_principal == 'ADMIN' %}
+                                    <a href="{% url 'mantenimiento:editar_repuesto' rep.id %}"
+                                       class="btn btn-outline-secondary" title="Editar">
                                         <i class="bi bi-pencil"></i>
                                     </a>
                                 {% endif %}
+
+                                <!-- Eliminar: SOLO Admin -->
                                 {% if user.rol_principal == 'ADMIN' %}
-                                    <a href="{% url 'mantenimiento:eliminar_repuesto' rep.id %}" 
+                                    <a href="{% url 'mantenimiento:eliminar_repuesto' rep.id %}"
                                        class="btn btn-outline-danger" title="Eliminar">
                                         <i class="bi bi-trash"></i>
                                     </a>
@@ -129,7 +171,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
+                        <td colspan="8" class="text-center text-muted py-4">
                             <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                             <p class="mt-2">No hay repuestos que coincidan con los filtros.</p>
                         </td>

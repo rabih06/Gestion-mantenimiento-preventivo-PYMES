@@ -8,11 +8,12 @@ from django.utils import timezone
 
 from .models import (
     Equipo, CategoriaEquipo, User, Alerta,
-    Repuesto, Proveedor, OrdenTrabajo, Incidencia, PlanMantenimiento,
+    Repuesto, Proveedor, OrdenTrabajo, Incidencia, PlanMantenimiento, MovimientoRepuesto
 )
 
 from .forms import (
-    IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm, ProveedorForm, PlanMantenimientoForm
+    IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm, ProveedorForm, PlanMantenimientoForm,
+    RetirarRepuestoForm
 )
 
 def login_view(request):
@@ -605,6 +606,11 @@ def lista_repuestos(request):
     if proveedor_filtro:
         repuestos = repuestos.filter(proveedor_id=proveedor_filtro)
 
+    # Filtro por tipo
+    tipo_filtro = request.GET.get('tipo', '')
+    if tipo_filtro:
+        repuestos_qs = repuestos_qs.filter(tipo=tipo_filtro)
+
     # Filtro por stock bajo
     stock_filtro = request.GET.get('stock', '')
     if stock_filtro == 'bajo':
@@ -644,6 +650,8 @@ def lista_repuestos(request):
         'query_params': query_params.urlencode(),
         'total_repuestos': total_repuestos,
         'repuestos_criticos': repuestos_criticos,
+        'tipo_filtro': tipo_filtro,
+        'tipos_repuesto': Repuesto.TIPO_CHOICES,
     }
     return render(request, 'mantenimiento/repuestos/lista_repuestos.html', context)
 
@@ -701,7 +709,7 @@ def crear_repuesto(request):
 @login_required
 def editar_repuesto(request, repuesto_id):
     """Editar un repuesto (ADMIN y TECNICO)."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+    if request.user.rol_principal not in ['ADMIN',]:
         messages.error(request, 'No tienes permiso para editar repuestos.')
         return redirect('mantenimiento:lista_repuestos')
 
@@ -1191,3 +1199,74 @@ def aplicar_plan(request, plan_id):
 
     messages.success(request, mensaje)
     return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+
+# =====================================================
+# RETIRO DE REPUESTOS DEL INVENTARIO
+# =====================================================
+
+@login_required
+def retirar_repuesto(request, repuesto_id):
+    """Permite al técnico retirar repuestos del inventario."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para retirar repuestos.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
+
+    if request.method == 'POST':
+        form = RetirarRepuestoForm(request.POST, repuesto=repuesto)
+        if form.is_valid():
+            cantidad = form.cleaned_data['cantidad']
+            motivo = form.cleaned_data.get('motivo', '')
+            cantidad_anterior = repuesto.cantidad_actual
+
+            # ✅ Actualizar stock
+            repuesto.cantidad_actual -= cantidad
+            repuesto.fecha_ultima_salida = timezone.now()
+            repuesto.save()
+
+            # ✅ Registrar movimiento (auditoría)
+            MovimientoRepuesto.objects.create(
+                repuesto=repuesto,
+                tipo='SALIDA',
+                cantidad=cantidad,
+                cantidad_anterior=cantidad_anterior,
+                cantidad_nueva=repuesto.cantidad_actual,
+                motivo=motivo,
+                usuario=request.user,
+            )
+
+            messages.success(
+                request,
+                f'✅ Se retiraron {cantidad} {repuesto.unidad_medida}(s) de "{repuesto.nombre}". '
+                f'Stock actual: {repuesto.cantidad_actual}.'
+            )
+            return redirect('mantenimiento:detalle_repuesto', repuesto_id=repuesto.id)
+    else:
+        form = RetirarRepuestoForm(repuesto=repuesto)
+
+    context = {
+        'form': form,
+        'repuesto': repuesto,
+    }
+    return render(request, 'mantenimiento/repuestos/retirar_repuesto.html', context)
+
+
+@login_required
+def historial_movimientos(request, repuesto_id):
+    """Muestra el historial de movimientos de un repuesto (auditoría)."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver los movimientos.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
+    movimientos = repuesto.movimientos.select_related(
+        'usuario', 'orden'
+    ).order_by('-created_at')
+
+    context = {
+        'repuesto': repuesto,
+        'movimientos': movimientos,
+        'total_movimientos': movimientos.count(),
+    }
+    return render(request, 'mantenimiento/repuestos/historial_movimientos.html', context)
