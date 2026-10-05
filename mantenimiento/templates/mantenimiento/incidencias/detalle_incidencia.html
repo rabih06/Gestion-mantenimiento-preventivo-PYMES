@@ -1,0 +1,166 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Incidencia #{{ incidencia.id }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="bi bi-exclamation-triangle"></i> Incidencia #{{ incidencia.id }}</h1>
+        <p class="text-muted mb-0">
+            <span class="badge bg-{% if incidencia.prioridad == 'CRITICA' %}danger{% elif incidencia.prioridad == 'ALTA' %}warning{% elif incidencia.prioridad == 'MEDIA' %}info{% else %}secondary{% endif %}">
+                {{ incidencia.get_prioridad_display }}
+            </span>
+            <span class="badge bg-{% if incidencia.estado == 'RESUELTA' %}success{% elif incidencia.estado == 'PENDIENTE' %}warning{% elif incidencia.estado == 'REVISION' %}info{% else %}secondary{% endif %}">
+                {{ incidencia.get_estado_display }}
+            </span>
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mantenimiento:lista_incidencias_admin' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        {% if user.rol_principal == 'ADMIN' and incidencia.estado != 'RESUELTA' and incidencia.estado != 'RECHAZADA' %}
+            {% if not ordenes %}
+                <a href="{% url 'mantenimiento:crear_ot_desde_incidencia' incidencia.id %}" class="btn btn-success">
+                    <i class="bi bi-plus-circle"></i> Crear OT
+                </a>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Descripción de la falla -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-card-text"></i> Descripción de la Falla</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0" style="white-space: pre-line;">{{ incidencia.descripcion_falla }}</p>
+            </div>
+        </div>
+
+        <!-- Órdenes generadas -->
+        {% if ordenes %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Órdenes Generadas</h5>
+                <span class="badge bg-secondary">{{ ordenes|length }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>OT</th>
+                            <th>Técnico</th>
+                            <th>Estado</th>
+                            <th>Fecha Prog.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for orden in ordenes %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'mantenimiento:detalle_orden' orden.id %}">OT-{{ orden.id }}</a>
+                                </td>
+                                <td>{{ orden.tecnico.get_full_name|default:"Sin asignar" }}</td>
+                                <td>
+                                    <span class="badge bg-{% if orden.estado == 'COMPLETADA' %}success{% elif orden.estado == 'PROGRESO' %}primary{% elif orden.estado == 'CANCELADA' %}secondary{% else %}warning{% endif %}">
+                                        {{ orden.get_estado_display }}
+                                    </span>
+                                </td>
+                                <td>{{ orden.fecha_programada|date:"d/m/Y H:i" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Acciones de cambio de estado -->
+        {% if user.rol_principal == 'ADMIN' or user.rol_principal == 'TECNICO' %}
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-gear"></i> Acciones</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Cambiar el estado de la incidencia:</p>
+                <div class="d-flex flex-wrap gap-2">
+                    {% if incidencia.estado != 'REVISION' %}
+                        <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'REVISION' %}"
+                           class="btn btn-outline-info btn-sm"
+                           onclick="return confirm('¿Marcar como En Revisión?')">
+                            <i class="bi bi-search"></i> En Revisión
+                        </a>
+                    {% endif %}
+                    {% if incidencia.estado != 'RESUELTA' %}
+                        <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'RESUELTA' %}"
+                           class="btn btn-outline-success btn-sm"
+                           onclick="return confirm('¿Marcar como Resuelta?')">
+                            <i class="bi bi-check-circle"></i> Resuelta
+                        </a>
+                    {% endif %}
+                    {% if incidencia.estado != 'RECHAZADA' %}
+                        <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'RECHAZADA' %}"
+                           class="btn btn-outline-secondary btn-sm"
+                           onclick="return confirm('¿Marcar como Rechazada?')">
+                            <i class="bi bi-x-circle"></i> Rechazada
+                        </a>
+                    {% endif %}
+                    {% if incidencia.estado != 'PENDIENTE' %}
+                        <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'PENDIENTE' %}"
+                           class="btn btn-outline-warning btn-sm"
+                           onclick="return confirm('¿Volver a marcar como Pendiente?')">
+                            <i class="bi bi-arrow-counterclockwise"></i> Pendiente
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-4">
+        <!-- Info de la incidencia -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Información</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Fecha reporte</span>
+                    <strong>{{ incidencia.fecha_reporte|date:"d/m/Y H:i" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Reportado por</span>
+                    <strong>{{ incidencia.operario.get_full_name|default:incidencia.operario.username }}</strong>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Equipo -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-cpu"></i> Equipo</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>{{ incidencia.equipo.codigo_interno }}</strong><br>
+                <small class="text-muted">{{ incidencia.equipo.nombre }}</small></p>
+                <p class="mb-1"><strong>Marca:</strong> {{ incidencia.equipo.marca|default:"-" }}</p>
+                <p class="mb-1"><strong>Modelo:</strong> {{ incidencia.equipo.modelo|default:"-" }}</p>
+                <p class="mb-0">
+                    <strong>Estado:</strong>
+                    <span class="badge bg-{% if incidencia.equipo.estado_operativo == 'ACTIVO' %}success{% elif incidencia.equipo.estado_operativo == 'MANTENIMIENTO' %}warning{% else %}danger{% endif %}">
+                        {{ incidencia.equipo.get_estado_operativo_display }}
+                    </span>
+                </p>
+                <hr>
+                <a href="{% url 'mantenimiento:detalle_equipo' incidencia.equipo.id %}" class="btn btn-sm btn-outline-primary w-100">
+                    <i class="bi bi-eye"></i> Ver equipo completo
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1516,3 +1516,194 @@ def cerrar_orden(request, orden_id):
         return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
 
     return render(request, 'mantenimiento/ordenes/cerrar_orden.html', {'orden': orden})
+# =====================================================
+# GESTIÓN DE INCIDENCIAS (Admin y Técnico)
+# =====================================================
+
+@login_required
+def lista_incidencias_admin(request):
+    """Lista completa de incidencias para admin y técnicos."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver esta sección.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    incidencias = Incidencia.objects.select_related(
+        'equipo', 'operario'
+    ).all()
+
+    # Búsqueda
+    q = request.GET.get('q', '').strip()
+    if q:
+        incidencias = incidencias.filter(
+            Q(descripcion_falla__icontains=q) |
+            Q(equipo__codigo_interno__icontains=q) |
+            Q(equipo__nombre__icontains=q) |
+            Q(operario__first_name__icontains=q) |
+            Q(operario__last_name__icontains=q)
+        )
+
+    # Filtros
+    estado_filtro = request.GET.get('estado', '')
+    if estado_filtro:
+        incidencias = incidencias.filter(estado=estado_filtro)
+
+    prioridad_filtro = request.GET.get('prioridad', '')
+    if prioridad_filtro:
+        incidencias = incidencias.filter(prioridad=prioridad_filtro)
+
+    equipo_filtro = request.GET.get('equipo', '')
+    if equipo_filtro:
+        incidencias = incidencias.filter(equipo_id=equipo_filtro)
+
+    # Ordenamiento
+    orden = request.GET.get('orden', '-fecha_reporte')
+    incidencias = incidencias.order_by(orden)
+
+    # Paginación
+    paginator = Paginator(incidencias, 15)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Contadores
+    total = Incidencia.objects.count()
+    pendientes = Incidencia.objects.filter(estado='PENDIENTE').count()
+    en_revision = Incidencia.objects.filter(estado='REVISION').count()
+    resueltas = Incidencia.objects.filter(estado='RESUELTA').count()
+
+    # Query params
+    query_params = request.GET.copy()
+    if 'page' in query_params:
+        del query_params['page']
+
+    context = {
+        'page_obj': page_obj,
+        'q': q,
+        'estado_filtro': estado_filtro,
+        'prioridad_filtro': prioridad_filtro,
+        'equipo_filtro': equipo_filtro,
+        'orden': orden,
+        'estados': Incidencia.ESTADO_CHOICES,
+        'prioridades': Incidencia.PRIORIDAD_CHOICES,
+        'equipos': Equipo.objects.all().order_by('codigo_interno'),
+        'query_params': query_params.urlencode(),
+        'total': total,
+        'pendientes': pendientes,
+        'en_revision': en_revision,
+        'resueltas': resueltas,
+    }
+    return render(request, 'mantenimiento/incidencias/lista_incidencias_admin.html', context)
+
+
+@login_required
+def detalle_incidencia(request, incidencia_id):
+    """Vista detallada de una incidencia con acciones."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver esta incidencia.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    incidencia = get_object_or_404(Incidencia, id=incidencia_id)
+
+    # OTs generadas desde esta incidencia (si las hay)
+    ordenes = incidencia.ordenes.select_related('tecnico', 'equipo').order_by('-fecha_programada')
+
+    context = {
+        'incidencia': incidencia,
+        'ordenes': ordenes,
+    }
+    return render(request, 'mantenimiento/incidencias/detalle_incidencia.html', context)
+
+
+@login_required
+def cambiar_estado_incidencia(request, incidencia_id, nuevo_estado):
+    """Cambia el estado de una incidencia."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para modificar incidencias.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    incidencia = get_object_or_404(Incidencia, id=incidencia_id)
+
+    estados_validos = ['PENDIENTE', 'REVISION', 'RESUELTA', 'RECHAZADA']
+    if nuevo_estado not in estados_validos:
+        messages.error(request, 'Estado no válido.')
+        return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
+
+    incidencia.estado = nuevo_estado
+    incidencia.save()
+
+    messages.success(
+        request,
+        f'✅ Incidencia #{incidencia.id} cambiada a "{incidencia.get_estado_display()}".'
+    )
+    return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
+
+
+@login_required
+def crear_ot_desde_incidencia(request, incidencia_id):
+    """Crea una Orden de Trabajo a partir de una incidencia."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden crear OTs desde incidencias.')
+        return redirect('mantenimiento:lista_incidencias_admin')
+
+    incidencia = get_object_or_404(Incidencia, id=incidencia_id)
+
+    # Verificar que no tenga ya una OT asociada
+    if incidencia.ordenes.exists():
+        messages.warning(request, 'Esta incidencia ya tiene una Orden de Trabajo asociada.')
+        return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
+
+    if request.method == 'POST':
+        # Recoger datos del formulario
+        tecnico_id = request.POST.get('tecnico', '')
+        prioridad = request.POST.get('prioridad', 'MEDIA')
+        fecha_programada_str = request.POST.get('fecha_programada', '')
+        descripcion = request.POST.get('descripcion', '').strip()
+
+        # Validaciones
+        if not fecha_programada_str:
+            messages.error(request, 'Debes indicar una fecha programada.')
+            return redirect('mantenimiento:crear_ot_desde_incidencia', incidencia_id=incidencia.id)
+
+        from datetime import datetime
+        try:
+            fecha_programada = datetime.fromisoformat(fecha_programada_str)
+        except ValueError:
+            messages.error(request, 'Formato de fecha inválido.')
+            return redirect('mantenimiento:crear_ot_desde_incidencia', incidencia_id=incidencia.id)
+
+        tecnico = None
+        if tecnico_id:
+            try:
+                tecnico = User.objects.get(id=tecnico_id, rol_principal='TECNICO')
+            except User.DoesNotExist:
+                pass
+
+        # Crear la OT
+        orden = OrdenTrabajo.objects.create(
+            equipo=incidencia.equipo,
+            tecnico=tecnico,
+            incidencia=incidencia,
+            tipo='CORRECTIVO',
+            prioridad=prioridad,
+            fecha_programada=fecha_programada,
+            descripcion_trabajo=descripcion or f"Reparación por incidencia #{incidencia.id}: {incidencia.descripcion_falla}",
+            estado='PROGRAMADA',
+        )
+
+        # Marcar la incidencia como "en revisión"
+        incidencia.estado = 'REVISION'
+        incidencia.save()
+
+        messages.success(request, f'✅ Se creó la OT-{orden.id} desde la incidencia #{incidencia.id}.')
+        return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+
+    # GET: mostrar formulario
+    from django.utils import timezone
+    from datetime import timedelta
+
+    context = {
+        'incidencia': incidencia,
+        'tecnicos': User.objects.filter(rol_principal='TECNICO', is_active=True),
+        'prioridades': OrdenTrabajo.PRIORIDAD_CHOICES,
+        'fecha_sugerida': (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M'),
+    }
+    return render(request, 'mantenimiento/incidencias/crear_ot_desde_incidencia.html', context)
