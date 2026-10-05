@@ -1,0 +1,137 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}{{ plan.nombre }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="bi bi-calendar-event"></i> {{ plan.nombre }}</h1>
+        <p class="text-muted mb-0">
+            Equipo: <strong>{{ plan.equipo.codigo_interno }}</strong> - {{ plan.equipo.nombre }}
+            {% if plan.is_active %}
+                <span class="badge bg-success ms-2">Activo</span>
+            {% else %}
+                <span class="badge bg-secondary ms-2">Inactivo</span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mantenimiento:lista_planes' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        {% if plan.is_active %}
+            <a href="{% url 'mantenimiento:aplicar_plan' plan.id %}" class="btn btn-success"
+               onclick="return confirm('¿Crear una OT preventiva a partir de este plan?')">
+                <i class="bi bi-play-fill"></i> Aplicar Plan
+            </a>
+        {% endif %}
+        {% if user.rol_principal == 'ADMIN' %}
+            <a href="{% url 'mantenimiento:editar_plan' plan.id %}" class="btn btn-warning">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+            <a href="{% url 'mantenimiento:eliminar_plan' plan.id %}" class="btn btn-danger">
+                <i class="bi bi-trash"></i> Eliminar
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Información del Plan</h5>
+                <li class="list-group-item d-flex justify-content-between">
+                <span class="text-muted">Técnico asignado</span><strong>
+                {% if plan.tecnico_asignado %}
+                    {{ plan.tecnico_asignado.get_full_name|default:plan.tecnico_asignado.username }}
+                {% else %}
+                    <span class="text-muted">Sin asignar</span>
+                {% endif %}
+                </strong>
+            </li>
+            </div>  
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Frecuencia (días)</span>
+                    <strong>{{ plan.frecuencia_dias|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Frecuencia por uso</span>
+                    <strong>{{ plan.frecuencia_uso|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Última ejecución</span>
+                    <strong>{{ plan.ultima_ejecucion|date:"d/m/Y H:i"|default:"Nunca" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Próxima ejecución</span>
+                    <strong class="{% if plan.estado_vencimiento == 'vencido' %}text-danger{% elif plan.estado_vencimiento == 'proximo' %}text-warning{% endif %}">
+                        {{ plan.proxima_ejecucion|date:"d/m/Y"|default:"Por uso" }}
+                    </strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Estado</span>
+                    <span class="badge bg-{% if plan.estado_vencimiento == 'vencido' %}danger{% elif plan.estado_vencimiento == 'proximo' %}warning{% elif plan.estado_vencimiento == 'al_dia' %}success{% else %}secondary{% endif %}">
+                        {% if plan.estado_vencimiento == 'vencido' %}Vencido
+                        {% elif plan.estado_vencimiento == 'proximo' %}Próximo
+                        {% elif plan.estado_vencimiento == 'al_dia' %}Al día
+                        {% else %}Sin fecha{% endif %}
+                    </span>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-card-text"></i> Descripción</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">{{ plan.descripcion }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Órdenes Generadas</h5>
+                <span class="badge bg-secondary">{{ total_ordenes }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>OT</th>
+                            <th>Técnico</th>
+                            <th>Estado</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for orden in ordenes %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'mantenimiento:detalle_orden' orden.id %}">OT-{{ orden.id }}</a>
+                                </td>
+                                <td>{{ orden.tecnico.get_full_name|default:"Sin asignar" }}</td>
+                                <td>
+                                    <span class="badge bg-{% if orden.estado == 'COMPLETADA' %}success{% elif orden.estado == 'PROGRESO' %}primary{% elif orden.estado == 'CANCELADA' %}secondary{% else %}warning{% endif %}">
+                                        {{ orden.get_estado_display }}
+                                    </span>
+                                </td>
+                                <td>{{ orden.fecha_programada|date:"d/m/Y" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">
+                                    Este plan no ha generado órdenes todavía.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

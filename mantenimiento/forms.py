@@ -2,7 +2,7 @@ from django import forms
 from django.forms import inlineformset_factory, TextInput
 from .models import (
     Incidencia, Equipo, User, AtributoEquipo,
-    Repuesto, Proveedor,
+    Repuesto, Proveedor, PlanMantenimiento
 )
 
 
@@ -247,3 +247,75 @@ class ProveedorForm(forms.ModelForm):
         if qs.exists():
             raise forms.ValidationError('Ya existe un proveedor con este correo.')
         return email
+    
+# =====================================================
+# FORMULARIO DE PLANES DE MANTENIMIENTO
+# =====================================================
+class PlanMantenimientoForm(forms.ModelForm):
+    """Formulario para crear y editar planes de mantenimiento preventivo."""
+
+    class Meta:
+        model = PlanMantenimiento
+        fields = [
+            'equipo', 'tecnico_asignado', 'nombre', 'descripcion',
+            'frecuencia_dias', 'frecuencia_uso',
+            'ultima_ejecucion', 'is_active',
+        ]
+        widgets = {
+            'equipo': forms.Select(attrs={'class': 'form-select'}),
+            'tecnico_asignado': forms.Select(attrs={'class': 'form-select'}),
+            'nombre': forms.TextInput(attrs={'class': 'form-control'}),
+            'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'frecuencia_dias': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'frecuencia_uso': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'ultima_ejecucion': forms.DateTimeInput(
+                attrs={'class': 'form-control', 'type': 'datetime-local'}
+            ),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+        labels = {
+            'equipo': 'Equipo *',
+            'tecnico_asignado': 'Técnico responsable',
+            'nombre': 'Nombre del plan *',
+            'descripcion': 'Descripción del trabajo a realizar *',
+            'frecuencia_dias': 'Frecuencia (días)',
+            'frecuencia_uso': 'Frecuencia por uso (horas/km)',
+            'ultima_ejecucion': 'Última ejecución',
+            'is_active': 'Plan activo',
+        }
+        help_texts = {
+            'equipo': 'Equipo al que aplica este plan.',
+            'tecnico_asignado': 'Se le asignará automáticamente al aplicar el plan. Opcional.',
+            'nombre': 'Ej: "Cambio de aceite y filtros".',
+            'descripcion': 'Detalle las tareas a realizar.',
+            'frecuencia_dias': 'Cada cuántos días debe ejecutarse (0 = no aplica).',
+            'frecuencia_uso': 'Opcional: cada cuántas horas o km (0 o vacío = no aplica).',
+            'ultima_ejecucion': 'Déjalo vacío si es la primera vez. Se usará la fecha actual.',
+            'is_active': 'Desmarca para pausar el plan sin eliminarlo.',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Solo mostrar técnicos activos en el campo tecnico_asignado
+        self.fields['tecnico_asignado'].queryset = User.objects.filter(
+            rol_principal='TECNICO',
+            is_active=True,
+        ).order_by('first_name', 'last_name', 'username')
+        self.fields['tecnico_asignado'].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        frecuencia_dias = cleaned.get('frecuencia_dias', 0) or 0
+        frecuencia_uso = cleaned.get('frecuencia_uso') or 0
+
+        if frecuencia_dias < 0:
+            raise forms.ValidationError('La frecuencia en días no puede ser negativa.')
+        if frecuencia_uso < 0:
+            raise forms.ValidationError('La frecuencia por uso no puede ser negativa.')
+
+        if frecuencia_dias == 0 and frecuencia_uso == 0:
+            raise forms.ValidationError(
+                'Debes especificar al menos una frecuencia: días o uso.'
+            )
+
+        return cleaned

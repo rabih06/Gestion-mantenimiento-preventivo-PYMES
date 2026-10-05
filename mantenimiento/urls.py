@@ -38,4 +38,11 @@ urlpatterns = [
     path('proveedores/<int:proveedor_id>/', views.detalle_proveedor, name='detalle_proveedor'),
     path('proveedores/<int:proveedor_id>/editar/', views.editar_proveedor, name='editar_proveedor'),
     path('proveedores/<int:proveedor_id>/eliminar/', views.eliminar_proveedor, name='eliminar_proveedor'),
+    # Planes de Mantenimiento
+    path('planes/', views.lista_planes, name='lista_planes'),
+    path('planes/crear/', views.crear_plan, name='crear_plan'),
+    path('planes/<int:plan_id>/', views.detalle_plan, name='detalle_plan'),
+    path('planes/<int:plan_id>/editar/', views.editar_plan, name='editar_plan'),
+    path('planes/<int:plan_id>/eliminar/', views.eliminar_plan, name='eliminar_plan'),
+    path('planes/<int:plan_id>/aplicar/', views.aplicar_plan, name='aplicar_plan'),
 ]

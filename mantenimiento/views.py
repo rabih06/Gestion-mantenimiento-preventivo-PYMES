@@ -12,7 +12,7 @@ from .models import (
 )
 
 from .forms import (
-    IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm, ProveedorForm
+    IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm, ProveedorForm, PlanMantenimientoForm
 )
 
 def login_view(request):
@@ -912,3 +912,282 @@ def eliminar_proveedor(request, proveedor_id):
         return redirect('mantenimiento:lista_proveedores')
 
     return render(request, 'mantenimiento/proveedores/confirmar_eliminar.html', {'proveedor': proveedor})
+
+# =====================================================
+# CRUD DE PLANES DE MANTENIMIENTO
+# =====================================================
+
+@login_required
+def lista_planes(request):
+    """Lista de planes con búsqueda, filtros y paginación."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver los planes.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    planes = PlanMantenimiento.objects.select_related('equipo').all()
+
+    # ✅ Filtro por rol: el técnico solo ve planes de equipos donde tiene órdenes
+    if request.user.rol_principal == 'TECNICO':
+        equipos_con_ordenes = OrdenTrabajo.objects.filter(
+            tecnico=request.user
+        ).values_list('equipo_id', flat=True).distinct()
+        planes = planes.filter(equipo_id__in=equipos_con_ordenes)
+
+    # Búsqueda
+    q = request.GET.get('q', '').strip()
+    if q:
+        planes = planes.filter(
+            Q(nombre__icontains=q) |
+            Q(descripcion__icontains=q) |
+            Q(equipo__codigo_interno__icontains=q) |
+            Q(equipo__nombre__icontains=q)
+        )
+
+    # Filtro por equipo
+    equipo_filtro = request.GET.get('equipo', '')
+    if equipo_filtro:
+        planes = planes.filter(equipo_id=equipo_filtro)
+
+    # Filtro por técnico
+    tecnico_filtro = request.GET.get('tecnico', '')
+    if tecnico_filtro:
+        planes = planes.filter(tecnico_asignado_id=tecnico_filtro)
+
+    # Filtro por estado
+    estado_filtro = request.GET.get('estado', '')
+    if estado_filtro == 'activos':
+        planes = planes.filter(is_active=True)
+    elif estado_filtro == 'inactivos':
+        planes = planes.filter(is_active=False)
+
+    # Filtro por vencimiento
+    vencimiento_filtro = request.GET.get('vencimiento', '')
+    if vencimiento_filtro:
+        from django.utils import timezone
+        from datetime import timedelta
+        hoy = timezone.now()
+        if vencimiento_filtro == 'vencidos':
+            planes = planes.filter(proxima_ejecucion__lt=hoy, is_active=True)
+        elif vencimiento_filtro == 'proximos_7dias':
+            planes = planes.filter(
+                proxima_ejecucion__gte=hoy,
+                proxima_ejecucion__lte=hoy + timedelta(days=7),
+                is_active=True,
+            )
+        elif vencimiento_filtro == 'proximos_30dias':
+            planes = planes.filter(
+                proxima_ejecucion__gte=hoy,
+                proxima_ejecucion__lte=hoy + timedelta(days=30),
+                is_active=True,
+            )
+
+    # Ordenamiento
+    orden = request.GET.get('orden', 'proxima_ejecucion')
+    planes = planes.order_by(orden)
+
+    # Paginación
+    paginator = Paginator(planes, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Contadores
+    from django.utils import timezone
+    from datetime import timedelta
+    hoy = timezone.now()
+    total_planes = PlanMantenimiento.objects.count()
+    activos = PlanMantenimiento.objects.filter(is_active=True).count()
+    vencidos = PlanMantenimiento.objects.filter(
+        is_active=True, proxima_ejecucion__lt=hoy
+    ).count()
+    proximos_7d = PlanMantenimiento.objects.filter(
+        is_active=True,
+        proxima_ejecucion__gte=hoy,
+        proxima_ejecucion__lte=hoy + timedelta(days=7),
+    ).count()
+
+    # Query params
+    query_params = request.GET.copy()
+    if 'page' in query_params:
+        del query_params['page']
+
+    context = {
+        'page_obj': page_obj,
+        'q': q,
+        'equipo_filtro': equipo_filtro,
+        'estado_filtro': estado_filtro,
+        'vencimiento_filtro': vencimiento_filtro,
+        'orden': orden,
+        'equipos': Equipo.objects.all().order_by('codigo_interno'),
+        'query_params': query_params.urlencode(),
+        'total_planes': total_planes,
+        'activos': activos,
+        'vencidos': vencidos,
+        'proximos_7d': proximos_7d,
+        'tecnico_filtro': tecnico_filtro,
+        'tecnicos': User.objects.filter(rol_principal='TECNICO', is_active=True),
+    }
+    return render(request, 'mantenimiento/planes/lista_planes.html', context)
+
+
+@login_required
+def detalle_plan(request, plan_id):
+    """Vista detallada de un plan con su historial de OTs."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver los planes.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    plan = get_object_or_404(PlanMantenimiento, id=plan_id)
+
+    # El técnico solo puede ver planes de equipos donde tiene órdenes
+    if request.user.rol_principal == 'TECNICO':
+        tiene_ordenes = OrdenTrabajo.objects.filter(
+            tecnico=request.user, equipo=plan.equipo
+        ).exists()
+        if not tiene_ordenes:
+            messages.error(request, 'No tienes permiso para ver este plan.')
+            return redirect('mantenimiento:lista_planes')
+
+    # OTs generadas por este plan
+    ordenes = plan.ordenes_generadas.select_related('tecnico', 'equipo').order_by('-fecha_programada')
+
+    context = {
+        'plan': plan,
+        'ordenes': ordenes,
+        'total_ordenes': ordenes.count(),
+    }
+    return render(request, 'mantenimiento/planes/detalle_plan.html', context)
+
+
+@login_required
+def crear_plan(request):
+    """Crear un nuevo plan (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden crear planes.')
+        return redirect('mantenimiento:lista_planes')
+
+    # Pre-seleccionar equipo si viene por query param
+    equipo_preseleccionado = request.GET.get('equipo', '')
+
+    if request.method == 'POST':
+        form = PlanMantenimientoForm(request.POST)
+        if form.is_valid():
+            plan = form.save()
+            messages.success(request, f'✅ Plan "{plan.nombre}" creado correctamente.')
+            return redirect('mantenimiento:detalle_plan', plan_id=plan.id)
+    else:
+        initial = {}
+        if equipo_preseleccionado:
+            initial['equipo'] = equipo_preseleccionado
+        form = PlanMantenimientoForm(initial=initial)
+
+    return render(request, 'mantenimiento/planes/form_plan.html', {
+        'form': form,
+        'titulo': 'Crear Nuevo Plan de Mantenimiento',
+        'accion': 'Crear',
+    })
+
+
+@login_required
+def editar_plan(request, plan_id):
+    """Editar un plan (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden editar planes.')
+        return redirect('mantenimiento:lista_planes')
+
+    plan = get_object_or_404(PlanMantenimiento, id=plan_id)
+
+    if request.method == 'POST':
+        form = PlanMantenimientoForm(request.POST, instance=plan)
+        if form.is_valid():
+            plan = form.save()
+            messages.success(request, f'✅ Plan "{plan.nombre}" actualizado.')
+            return redirect('mantenimiento:detalle_plan', plan_id=plan.id)
+    else:
+        form = PlanMantenimientoForm(instance=plan)
+
+    return render(request, 'mantenimiento/planes/form_plan.html', {
+        'form': form,
+        'plan': plan,
+        'titulo': f'Editar: {plan.nombre}',
+        'accion': 'Guardar Cambios',
+    })
+
+
+@login_required
+def eliminar_plan(request, plan_id):
+    """Eliminar un plan (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden eliminar planes.')
+        return redirect('mantenimiento:lista_planes')
+
+    plan = get_object_or_404(PlanMantenimiento, id=plan_id)
+
+    if request.method == 'POST':
+        nombre = plan.nombre
+        plan.delete()
+        messages.success(request, f'Plan "{nombre}" eliminado correctamente.')
+        return redirect('mantenimiento:lista_planes')
+
+    return render(request, 'mantenimiento/planes/confirmar_eliminar.html', {'plan': plan})
+
+
+@login_required
+def aplicar_plan(request, plan_id):
+    """Genera una Orden de Trabajo preventiva a partir de un plan."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para aplicar planes.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    plan = get_object_or_404(PlanMantenimiento, id=plan_id)
+
+    # Técnico: solo puede aplicar planes de equipos donde tiene órdenes
+    if request.user.rol_principal == 'TECNICO':
+        tiene_ordenes = OrdenTrabajo.objects.filter(
+            tecnico=request.user, equipo=plan.equipo
+        ).exists()
+        if not tiene_ordenes:
+            messages.error(request, 'No tienes permiso para aplicar este plan.')
+            return redirect('mantenimiento:lista_planes')
+
+    if not plan.is_active:
+        messages.error(request, 'No puedes aplicar un plan inactivo.')
+        return redirect('mantenimiento:detalle_plan', plan_id=plan.id)
+
+    from django.utils import timezone
+    ahora = timezone.now()
+
+    # ✅ Determinar el técnico a asignar:
+    # 1. Si el plan tiene tecnico_asignado → usarlo
+    # 2. Si no, y el que aplica es TÉCNICO → asignarle a él
+    # 3. Si no, y el que aplica es ADMIN → dejar sin técnico (None)
+    tecnico = None
+    if plan.tecnico_asignado:
+        tecnico = plan.tecnico_asignado
+    elif request.user.rol_principal == 'TECNICO':
+        tecnico = request.user
+
+    # Crear la Orden de Trabajo
+    orden = OrdenTrabajo.objects.create(
+        equipo=plan.equipo,
+        tecnico=tecnico,
+        plan=plan,
+        tipo='PREVENTIVO',
+        prioridad='MEDIA',
+        fecha_programada=ahora,
+        descripcion_trabajo=f"[Plan: {plan.nombre}]\n\n{plan.descripcion}",
+        estado='PROGRAMADA',
+        generada_por_sistema=False,
+    )
+
+    # Actualizar el plan
+    plan.ultima_ejecucion = ahora
+    plan.save()  # Recalcula proxima_ejecucion automáticamente
+
+    # Mensaje personalizado según quién quedó asignado
+    if tecnico:
+        mensaje = f'✅ Se creó la OT-{orden.id} y se asignó a {tecnico.get_full_name() or tecnico.username}.'
+    else:
+        mensaje = f'✅ Se creó la OT-{orden.id} (sin técnico asignado). Asígnalo desde el detalle de la orden.'
+
+    messages.success(request, mensaje)
+    return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
