@@ -85,3 +85,4 @@ def crear_alerta_incidencia(sender, instance, created, **kwargs):
             mensaje=f"Incidencia {instance.get_prioridad_display()}: {instance.equipo.codigo_interno} - {instance.descripcion_falla[:80]}",
             equipo=instance.equipo,
         )
+

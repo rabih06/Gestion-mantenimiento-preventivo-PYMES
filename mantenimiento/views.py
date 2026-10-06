@@ -1627,6 +1627,11 @@ def cambiar_estado_incidencia(request, incidencia_id, nuevo_estado):
         messages.error(request, 'Estado no válido.')
         return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
 
+    # ✅ Validación adicional: solo admin puede rechazar
+    if nuevo_estado == 'RECHAZADA' and request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden rechazar incidencias.')
+        return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
+
     incidencia.estado = nuevo_estado
     incidencia.save()
 

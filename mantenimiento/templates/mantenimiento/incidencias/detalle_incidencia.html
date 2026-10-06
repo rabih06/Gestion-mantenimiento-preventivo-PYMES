@@ -101,7 +101,7 @@
                             <i class="bi bi-check-circle"></i> Resuelta
                         </a>
                     {% endif %}
-                    {% if incidencia.estado != 'RECHAZADA' %}
+                    {% if incidencia.estado != 'RECHAZADA' and user.rol_principal == 'ADMIN' %}
                         <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'RECHAZADA' %}"
                            class="btn btn-outline-secondary btn-sm"
                            onclick="return confirm('¿Marcar como Rechazada?')">
