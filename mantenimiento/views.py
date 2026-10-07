@@ -8,13 +8,16 @@ from django.utils import timezone
 
 from .models import (
     Equipo, CategoriaEquipo, User, Alerta,
-    Repuesto, Proveedor, OrdenTrabajo, Incidencia, PlanMantenimiento, MovimientoRepuesto, OrdenRepuesto
+    Repuesto, Proveedor, OrdenTrabajo, Incidencia, PlanMantenimiento,
+    MovimientoRepuesto, OrdenRepuesto
 )
 
 from .forms import (
-    IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm, ProveedorForm, PlanMantenimientoForm,
-    RetirarRepuestoForm, OrdenTrabajoForm, OrdenRepuestoFormSet
+    IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm,
+    ProveedorForm, PlanMantenimientoForm, RetirarRepuestoForm,
+    OrdenTrabajoForm, OrdenRepuestoFormSet
 )
+
 
 def login_view(request):
     """Vista de login personalizada."""
@@ -47,7 +50,6 @@ def redirigir_por_rol(request):
     elif rol == 'OPERARIO':
         return redirect('mantenimiento:dashboard_operario')
     else:
-        # Si no tiene rol definido, cerrar sesión por seguridad
         messages.error(request, 'Tu usuario no tiene un rol asignado. Contacta al administrador.')
         return redirect('mantenimiento:login')
 
@@ -62,47 +64,41 @@ def dashboard_admin(request):
     # KPIs PRINCIPALES
     # =====================================================
     total_equipos = Equipo.objects.count()
-    
+
     ordenes_abiertas = OrdenTrabajo.objects.filter(
         estado__in=['PROGRAMADA', 'PROGRESO']
     ).count()
-    
-    alertas_activas = Alerta.objects.filter(leida=False).count()
+
+    # ✅ Alertas NO leídas por el admin actual
+    alertas_activas = Alerta.objects.exclude(leida_por=request.user).count()
 
     # =====================================================
     # KPIs SECUNDARIOS
     # =====================================================
     incidencias_pendientes = Incidencia.objects.filter(estado='PENDIENTE').count()
-    
-    repuestos_stock_bajo = Repuesto.objects.filter(
-        cantidad_actual__lte=models.F('stock_minimo')
-    ).count() if False else 0  # Lo calculamos después sin F()
 
-    # Contar repuestos con stock bajo (sin usar F() aquí para simplificar)
-    repuestos_bajos = 0
-    for rep in Repuesto.objects.all():
-        if rep.stock_bajo:
-            repuestos_bajos += 1
+    repuestos_bajos = sum(1 for rep in Repuesto.objects.all() if rep.stock_bajo)
 
     # =====================================================
-    # DATOS PARA GRÁFICO (Equipos por estado)
+    # DATOS PARA GRÁFICO
     # =====================================================
     equipos_por_estado = Equipo.objects.values('estado_operativo').annotate(
         total=Count('id')
     )
-    
-    # Convertir a formato para Chart.js
+
     estados_labels = []
     estados_data = []
     for item in equipos_por_estado:
-        estados_labels.append(dict(Equipo.ESTADO_CHOICES).get(item['estado_operativo'], item['estado_operativo']))
+        estados_labels.append(
+            dict(Equipo.ESTADO_CHOICES).get(item['estado_operativo'], item['estado_operativo'])
+        )
         estados_data.append(item['total'])
 
     # =====================================================
     # ÚLTIMAS ÓRDENES Y ALERTAS
     # =====================================================
     ultimas_ordenes = OrdenTrabajo.objects.all().order_by('-fecha_programada')[:5]
-    ultimas_alertas = Alerta.objects.filter(leida=False).order_by('-created_at')[:5]
+    ultimas_alertas = Alerta.objects.exclude(leida_por=request.user).order_by('-created_at')[:5]
 
     context = {
         'total_equipos': total_equipos,
@@ -124,18 +120,18 @@ def dashboard_tecnico(request):
     if request.user.rol_principal != 'TECNICO':
         return redirect('mantenimiento:redirigir_por_rol')
 
-    # Solo las órdenes asignadas al técnico actual
+    # ✅ Alertas no leídas por el técnico actual
+    alertas_no_leidas = Alerta.objects.exclude(leida_por=request.user).count()
+
     ordenes = OrdenTrabajo.objects.filter(
         tecnico=request.user
     ).select_related('equipo', 'incidencia')
 
-    # Agrupar por estado para el Kanban
     programadas = ordenes.filter(estado='PROGRAMADA').order_by('prioridad', 'fecha_programada')
     en_progreso = ordenes.filter(estado='PROGRESO').order_by('fecha_programada')
     completadas = ordenes.filter(estado='COMPLETADA').order_by('-fecha_fin')[:10]
     canceladas = ordenes.filter(estado='CANCELADA').order_by('-fecha_programada')[:10]
 
-    # KPIs rápidos
     total_asignadas = ordenes.count()
     total_programadas = programadas.count()
     total_progreso = en_progreso.count()
@@ -150,6 +146,7 @@ def dashboard_tecnico(request):
         'total_programadas': total_programadas,
         'total_progreso': total_progreso,
         'total_completadas': total_completadas,
+        'alertas_no_leidas': alertas_no_leidas,
     }
     return render(request, 'mantenimiento/dashboard_tecnico.html', context)
 
@@ -159,18 +156,16 @@ def dashboard_operario(request):
     """Panel del operario (reportar fallas, ver estado de equipos)."""
     if request.user.rol_principal != 'OPERARIO':
         return redirect('mantenimiento:redirigir_por_rol')
-    
-    # Equipos asignados al operario
+
     equipos = request.user.equipos_asignados.all()
-    
-    # Incidencias reportadas por el operario
     incidencias = request.user.incidencias_reportadas.all().order_by('-fecha_reporte')[:10]
-    
+
     context = {
         'equipos': equipos,
         'incidencias': incidencias,
     }
     return render(request, 'mantenimiento/dashboard_operario.html', context)
+
 
 @login_required
 def reportar_incidencia(request):
@@ -215,108 +210,21 @@ def lista_incidencias(request):
     }
     return render(request, 'mantenimiento/lista_incidencias.html', context)
 
-@login_required
-def detalle_orden(request, orden_id):
-    """Vista de detalle de una orden de trabajo."""
-    if request.user.rol_principal not in ['TECNICO', 'ADMIN']:
-        return redirect('mantenimiento:redirigir_por_rol')
 
-    orden = get_object_or_404(OrdenTrabajo, id=orden_id)
-
-    # Los técnicos solo pueden ver sus propias órdenes
-    if request.user.rol_principal == 'TECNICO' and orden.tecnico != request.user:
-        messages.error(request, 'No tienes permiso para ver esta orden.')
-        return redirect('mantenimiento:dashboard_tecnico')
-
-    # Repuestos disponibles para añadir
-    repuestos_disponibles = Repuesto.objects.filter(cantidad_actual__gt=0)
-    repuestos_usados = orden.repuestos_usados.select_related('repuesto')
-
-    context = {
-        'orden': orden,
-        'repuestos_disponibles': repuestos_disponibles,
-        'repuestos_usados': repuestos_usados,
-    }
-    return render(request, 'mantenimiento/detalle_orden.html', context)
-
-
-@login_required
-def cambiar_estado_orden(request, orden_id, nuevo_estado):
-    """Cambia el estado de una orden y aplica la lógica de negocio asociada."""
-    if request.user.rol_principal not in ['TECNICO', 'ADMIN']:
-        return redirect('mantenimiento:redirigir_por_rol')
-
-    orden = get_object_or_404(OrdenTrabajo, id=orden_id)
-
-    # Los técnicos solo pueden cambiar sus propias órdenes
-    if request.user.rol_principal == 'TECNICO' and orden.tecnico != request.user:
-        messages.error(request, 'No tienes permiso para modificar esta orden.')
-        return redirect('mantenimiento:dashboard_tecnico')
-
-    estados_validos = ['PROGRAMADA', 'PROGRESO', 'COMPLETADA', 'CANCELADA']
-    if nuevo_estado not in estados_validos:
-        messages.error(request, 'Estado no válido.')
-        return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
-
-    from django.utils import timezone
-    ahora = timezone.now()
-    equipo = orden.equipo
-
-    # =====================================================
-    # LÓGICA DE NEGOCIO SEGÚN EL NUEVO ESTADO
-    # =====================================================
-    if nuevo_estado == 'PROGRESO':
-        # Iniciar trabajo
-        orden.estado = 'PROGRESO'
-        orden.fecha_inicio = ahora
-        equipo.estado_operativo = 'MANTENIMIENTO'
-        equipo.bloqueado = True
-        messages.success(request, f'OT-{orden.id} iniciada. Equipo bloqueado en mantenimiento.')
-
-    elif nuevo_estado == 'COMPLETADA':
-        # Completar trabajo
-        orden.estado = 'COMPLETADA'
-        orden.fecha_fin = ahora
-        # Calcular duración
-        if orden.fecha_inicio:
-            delta = ahora - orden.fecha_inicio
-            orden.duracion_horas = round(delta.total_seconds() / 3600, 2)
-        # Actualizar equipo
-        equipo.estado_operativo = 'ACTIVO'
-        equipo.bloqueado = False
-        equipo.ultimo_mantenimiento = ahora
-        # Calcular próximo mantenimiento
-        if equipo.intervalo_mantenimiento_dias > 0:
-            equipo.proximo_mantenimiento = ahora + timezone.timedelta(
-                days=equipo.intervalo_mantenimiento_dias
-            )
-        messages.success(request, f'OT-{orden.id} completada. Equipo disponible.')
-
-    elif nuevo_estado == 'CANCELADA':
-        # Cancelar
-        orden.estado = 'CANCELADA'
-        equipo.estado_operativo = 'ACTIVO'
-        equipo.bloqueado = False
-        messages.warning(request, f'OT-{orden.id} cancelada.')
-
-    orden.save()
-    equipo.save()
-
-    return redirect('mantenimiento:dashboard_tecnico')
-
-from .models import Alerta
-
+# =====================================================
+# ALERTAS
+# =====================================================
 
 @login_required
 def lista_alertas(request):
-    """Lista todas las alertas con filtros."""
     if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
         messages.error(request, 'No tienes permiso para ver las alertas.')
         return redirect('mantenimiento:redirigir_por_rol')
 
-    alertas = Alerta.objects.select_related('repuesto', 'equipo', 'plan').order_by('-created_at')
+    alertas = Alerta.objects.select_related(
+        'repuesto', 'equipo', 'plan'
+    ).order_by('-created_at')
 
-    # Filtros por query params
     tipo_filtro = request.GET.get('tipo', '')
     estado_filtro = request.GET.get('estado', '')
 
@@ -324,14 +232,13 @@ def lista_alertas(request):
         alertas = alertas.filter(tipo=tipo_filtro)
 
     if estado_filtro == 'leidas':
-        alertas = alertas.filter(leida=True)
+        alertas = alertas.filter(leida_por=request.user)
     elif estado_filtro == 'no_leidas':
-        alertas = alertas.filter(leida=False)
+        alertas = alertas.exclude(leida_por=request.user)
 
-    # Contadores para las tarjetas de resumen
     total_alertas = Alerta.objects.count()
-    no_leidas = Alerta.objects.filter(leida=False).count()
-    leidas = Alerta.objects.filter(leida=True).count()
+    no_leidas = Alerta.objects.exclude(leida_por=request.user).count()
+    leidas = Alerta.objects.filter(leida_por=request.user).count()
 
     context = {
         'alertas': alertas,
@@ -347,27 +254,26 @@ def lista_alertas(request):
 
 @login_required
 def marcar_alerta_leida(request, alerta_id):
-    """Marca una alerta como leída."""
     if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
         return redirect('mantenimiento:redirigir_por_rol')
 
     alerta = get_object_or_404(Alerta, id=alerta_id)
-    alerta.leida = True
-    alerta.save()
+    alerta.leida_por.add(request.user)
     messages.success(request, 'Alerta marcada como leída.')
 
-    # Volver a donde estaba el usuario
     return redirect(request.META.get('HTTP_REFERER', 'mantenimiento:lista_alertas'))
 
 
 @login_required
 def marcar_todas_leidas(request):
-    """Marca todas las alertas como leídas."""
     if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
         return redirect('mantenimiento:redirigir_por_rol')
 
     if request.method == 'POST':
-        cantidad = Alerta.objects.filter(leida=False).update(leida=True)
+        pendientes = Alerta.objects.exclude(leida_por=request.user)
+        cantidad = pendientes.count()
+        for alerta in pendientes:
+            alerta.leida_por.add(request.user)
         messages.success(request, f'{cantidad} alertas marcadas como leídas.')
 
     return redirect('mantenimiento:lista_alertas')
@@ -385,6 +291,7 @@ def eliminar_alerta(request, alerta_id):
 
     return redirect('mantenimiento:lista_alertas')
 
+
 # =====================================================
 # CRUD DE EQUIPOS
 # =====================================================
@@ -394,16 +301,11 @@ def lista_equipos(request):
     """Lista de equipos con búsqueda, filtros y paginación."""
     equipos = Equipo.objects.select_related('categoria', 'responsable').all()
 
-    # ✅ FILTRO POR ROL: Operario solo ve sus equipos o los sin responsable
     if request.user.rol_principal == 'OPERARIO':
         equipos = equipos.filter(
             Q(responsable=request.user) | Q(responsable__isnull=True)
         )
-    # ADMIN y TECNICO ven todos
 
-    # ... el resto de la función (búsqueda, filtros, paginación) queda igual
-
-    # Búsqueda por texto
     q = request.GET.get('q', '').strip()
     if q:
         equipos = equipos.filter(
@@ -413,7 +315,6 @@ def lista_equipos(request):
             Q(marca__icontains=q)
         )
 
-    # Filtros
     estado_filtro = request.GET.get('estado', '')
     if estado_filtro:
         equipos = equipos.filter(estado_operativo=estado_filtro)
@@ -428,16 +329,13 @@ def lista_equipos(request):
     elif bloqueado_filtro == 'no':
         equipos = equipos.filter(bloqueado=False)
 
-    # Ordenamiento
     orden = request.GET.get('orden', 'codigo_interno')
     equipos = equipos.order_by(orden)
 
-    # Paginación
     paginator = Paginator(equipos, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    # Mantener los filtros al cambiar de página
     query_params = request.GET.copy()
     if 'page' in query_params:
         del query_params['page']
@@ -462,7 +360,6 @@ def detalle_equipo(request, equipo_id):
     """Vista detallada de un equipo con su historial completo."""
     equipo = get_object_or_404(Equipo, id=equipo_id)
 
-    # ✅ VALIDACIÓN: Operario solo puede ver equipos suyos o sin responsable
     if request.user.rol_principal == 'OPERARIO':
         if equipo.responsable and equipo.responsable != request.user:
             messages.error(
@@ -472,13 +369,13 @@ def detalle_equipo(request, equipo_id):
             )
             return redirect('mantenimiento:lista_equipos')
 
-    # Historiales relacionados
     ordenes = equipo.ordenes.select_related('tecnico').order_by('-fecha_programada')[:10]
     incidencias = equipo.incidencias.select_related('operario').order_by('-fecha_reporte')[:10]
     planes = equipo.planes.filter(is_active=True)
     atributos = equipo.atributos.all()
     historial_estados = equipo.historial_estados.order_by('-fecha_cambio')[:10]
-    alertas = equipo.alertas.filter(leida=False).order_by('-created_at')[:5]
+    # ✅ Alertas NO leídas por el usuario actual
+    alertas = equipo.alertas.exclude(leida_por=request.user).order_by('-created_at')[:5]
 
     context = {
         'equipo': equipo,
@@ -502,7 +399,7 @@ def crear_equipo(request):
     if request.method == 'POST':
         form = EquipoForm(request.POST)
         formset = AtributoEquipoFormSet(request.POST)
-        
+
         if form.is_valid() and formset.is_valid():
             equipo = form.save()
             formset.instance = equipo
@@ -533,7 +430,7 @@ def editar_equipo(request, equipo_id):
     if request.method == 'POST':
         form = EquipoForm(request.POST, instance=equipo)
         formset = AtributoEquipoFormSet(request.POST, instance=equipo)
-        
+
         if form.is_valid() and formset.is_valid():
             equipo = form.save()
             formset.save()
@@ -561,7 +458,6 @@ def eliminar_equipo(request, equipo_id):
 
     equipo = get_object_or_404(Equipo, id=equipo_id)
 
-    # Validar que no tenga órdenes activas
     ordenes_activas = equipo.ordenes.filter(estado__in=['PROGRAMADA', 'PROGRESO']).count()
     if ordenes_activas > 0:
         messages.error(
@@ -592,7 +488,6 @@ def lista_repuestos(request):
 
     repuestos = Repuesto.objects.select_related('proveedor').all()
 
-    # Búsqueda
     q = request.GET.get('q', '').strip()
     if q:
         repuestos = repuestos.filter(
@@ -601,41 +496,33 @@ def lista_repuestos(request):
             Q(descripcion__icontains=q)
         )
 
-    # Filtro por proveedor
     proveedor_filtro = request.GET.get('proveedor', '')
     if proveedor_filtro:
         repuestos = repuestos.filter(proveedor_id=proveedor_filtro)
 
-    # Filtro por tipo
     tipo_filtro = request.GET.get('tipo', '')
     if tipo_filtro:
-        repuestos_qs = repuestos_qs.filter(tipo=tipo_filtro)
+        repuestos = repuestos.filter(tipo=tipo_filtro)  # ✅ FIX: era repuestos_qs
 
-    # Filtro por stock bajo
     stock_filtro = request.GET.get('stock', '')
     if stock_filtro == 'bajo':
-        # Filtrar en Python porque el stock_bajo es una property
         repuestos = [r for r in repuestos if r.stock_bajo]
     elif stock_filtro == 'normal':
         repuestos = [r for r in repuestos if not r.stock_bajo]
 
-    # Ordenamiento
     orden = request.GET.get('orden', 'nombre')
     if isinstance(repuestos, list):
         repuestos = sorted(repuestos, key=lambda x: getattr(x, orden, ''))
     else:
         repuestos = repuestos.order_by(orden)
 
-    # Paginación
     paginator = Paginator(repuestos, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    # Contadores
     total_repuestos = Repuesto.objects.count()
     repuestos_criticos = sum(1 for r in Repuesto.objects.all() if r.stock_bajo)
 
-    # Query params
     query_params = request.GET.copy()
     if 'page' in query_params:
         del query_params['page']
@@ -665,13 +552,13 @@ def detalle_repuesto(request, repuesto_id):
 
     repuesto = get_object_or_404(Repuesto, id=repuesto_id)
 
-    # Órdenes donde se ha usado este repuesto
-    usos = repuesto.ordenes_usadas.select_related('orden', 'orden__equipo').order_by('-created_at')[:20]
+    usos = repuesto.ordenes_usadas.select_related(
+        'orden', 'orden__equipo'
+    ).order_by('-created_at')[:20]
 
-    # Alertas activas de este repuesto
-    alertas = repuesto.alertas.filter(leida=False).order_by('-created_at')
+    # ✅ FIX: era equipo.alertas → debe ser repuesto.alertas
+    alertas = repuesto.alertas.exclude(leida_por=request.user).order_by('-created_at')
 
-    # Calcular estadísticas
     total_usado = sum(u.cantidad_utilizada for u in repuesto.ordenes_usadas.all())
 
     context = {
@@ -708,8 +595,8 @@ def crear_repuesto(request):
 
 @login_required
 def editar_repuesto(request, repuesto_id):
-    """Editar un repuesto (ADMIN y TECNICO)."""
-    if request.user.rol_principal not in ['ADMIN',]:
+    """Editar un repuesto (solo ADMIN)."""
+    if request.user.rol_principal != 'ADMIN':
         messages.error(request, 'No tienes permiso para editar repuestos.')
         return redirect('mantenimiento:lista_repuestos')
 
@@ -741,7 +628,6 @@ def eliminar_repuesto(request, repuesto_id):
 
     repuesto = get_object_or_404(Repuesto, id=repuesto_id)
 
-    # Validar que no esté en uso en órdenes activas
     usos_activos = repuesto.ordenes_usadas.filter(
         orden__estado__in=['PROGRAMADA', 'PROGRESO']
     ).count()
@@ -758,20 +644,86 @@ def eliminar_repuesto(request, repuesto_id):
         messages.success(request, f'Repuesto "{nombre}" eliminado correctamente.')
         return redirect('mantenimiento:lista_repuestos')
 
-    # =====================================================
-# CRUD DE PROVEEDORES
+    return render(request, 'mantenimiento/repuestos/confirmar_eliminar.html', {'repuesto': repuesto})
+
+
+@login_required
+def retirar_repuesto(request, repuesto_id):
+    """Permite al técnico retirar repuestos del inventario."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para retirar repuestos.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
+
+    if request.method == 'POST':
+        form = RetirarRepuestoForm(request.POST, repuesto=repuesto)
+        if form.is_valid():
+            cantidad = form.cleaned_data['cantidad']
+            motivo = form.cleaned_data.get('motivo', '')
+            cantidad_anterior = repuesto.cantidad_actual
+
+            repuesto.cantidad_actual -= cantidad
+            repuesto.fecha_ultima_salida = timezone.now()
+            repuesto.save()
+
+            MovimientoRepuesto.objects.create(
+                repuesto=repuesto,
+                tipo='SALIDA',
+                cantidad=cantidad,
+                cantidad_anterior=cantidad_anterior,
+                cantidad_nueva=repuesto.cantidad_actual,
+                motivo=motivo,
+                usuario=request.user,
+            )
+
+            messages.success(
+                request,
+                f'✅ Se retiraron {cantidad} {repuesto.unidad_medida}(s) de "{repuesto.nombre}". '
+                f'Stock actual: {repuesto.cantidad_actual}.'
+            )
+            return redirect('mantenimiento:detalle_repuesto', repuesto_id=repuesto.id)
+    else:
+        form = RetirarRepuestoForm(repuesto=repuesto)
+
+    context = {'form': form, 'repuesto': repuesto}
+    return render(request, 'mantenimiento/repuestos/retirar_repuesto.html', context)
+
+
+@login_required
+def historial_movimientos(request, repuesto_id):
+    """Muestra el historial de movimientos de un repuesto (auditoría)."""
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+        messages.error(request, 'No tienes permiso para ver los movimientos.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
+    movimientos = repuesto.movimientos.select_related(
+        'usuario', 'orden'
+    ).order_by('-created_at')
+
+    context = {
+        'repuesto': repuesto,
+        'movimientos': movimientos,
+        'total_movimientos': movimientos.count(),
+    }
+    return render(request, 'mantenimiento/repuestos/historial_movimientos.html', context)
+
+
+# =====================================================
+# CRUD DE PROVEEDORES (SOLO ADMIN)
 # =====================================================
 
 @login_required
 def lista_proveedores(request):
-    """Lista de proveedores con búsqueda, filtros y paginación."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
-        messages.error(request, 'No tienes permiso para ver los proveedores.')
+    """Lista de proveedores con búsqueda, filtros y paginación. SOLO ADMIN."""
+    # ✅ FIX: Técnico ya no puede ver proveedores
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden ver los proveedores.')
         return redirect('mantenimiento:redirigir_por_rol')
 
     proveedores = Proveedor.objects.all()
 
-    # Búsqueda
     q = request.GET.get('q', '').strip()
     if q:
         proveedores = proveedores.filter(
@@ -781,28 +733,23 @@ def lista_proveedores(request):
             Q(telefono__icontains=q)
         )
 
-    # Filtro por estado
     estado_filtro = request.GET.get('estado', '')
     if estado_filtro == 'activos':
         proveedores = proveedores.filter(is_active=True)
     elif estado_filtro == 'inactivos':
         proveedores = proveedores.filter(is_active=False)
 
-    # Ordenamiento
     orden = request.GET.get('orden', 'nombre')
     proveedores = proveedores.order_by(orden)
 
-    # Paginación
     paginator = Paginator(proveedores, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    # Contadores
     total_proveedores = Proveedor.objects.count()
     activos = Proveedor.objects.filter(is_active=True).count()
     inactivos = Proveedor.objects.filter(is_active=False).count()
 
-    # Query params
     query_params = request.GET.copy()
     if 'page' in query_params:
         del query_params['page']
@@ -822,17 +769,15 @@ def lista_proveedores(request):
 
 @login_required
 def detalle_proveedor(request, proveedor_id):
-    """Vista detallada de un proveedor con sus repuestos asociados."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
-        messages.error(request, 'No tienes permiso para ver los proveedores.')
+    """Vista detallada de un proveedor. SOLO ADMIN."""
+    # ✅ FIX: Técnico ya no puede ver proveedores
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden ver los proveedores.')
         return redirect('mantenimiento:redirigir_por_rol')
 
     proveedor = get_object_or_404(Proveedor, id=proveedor_id)
-
-    # Repuestos que provee este proveedor
     repuestos = proveedor.repuestos.all().order_by('nombre')
 
-    # Estadísticas
     total_repuestos = repuestos.count()
     repuestos_stock_bajo = sum(1 for r in repuestos if r.stock_bajo)
 
@@ -903,7 +848,6 @@ def eliminar_proveedor(request, proveedor_id):
 
     proveedor = get_object_or_404(Proveedor, id=proveedor_id)
 
-    # Validar que no tenga repuestos asociados
     repuestos_asociados = proveedor.repuestos.count()
     if repuestos_asociados > 0:
         messages.error(
@@ -921,6 +865,7 @@ def eliminar_proveedor(request, proveedor_id):
 
     return render(request, 'mantenimiento/proveedores/confirmar_eliminar.html', {'proveedor': proveedor})
 
+
 # =====================================================
 # CRUD DE PLANES DE MANTENIMIENTO
 # =====================================================
@@ -934,14 +879,12 @@ def lista_planes(request):
 
     planes = PlanMantenimiento.objects.select_related('equipo').all()
 
-    # ✅ Filtro por rol: el técnico solo ve planes de equipos donde tiene órdenes
     if request.user.rol_principal == 'TECNICO':
         equipos_con_ordenes = OrdenTrabajo.objects.filter(
             tecnico=request.user
         ).values_list('equipo_id', flat=True).distinct()
         planes = planes.filter(equipo_id__in=equipos_con_ordenes)
 
-    # Búsqueda
     q = request.GET.get('q', '').strip()
     if q:
         planes = planes.filter(
@@ -951,27 +894,22 @@ def lista_planes(request):
             Q(equipo__nombre__icontains=q)
         )
 
-    # Filtro por equipo
     equipo_filtro = request.GET.get('equipo', '')
     if equipo_filtro:
         planes = planes.filter(equipo_id=equipo_filtro)
 
-    # Filtro por técnico
     tecnico_filtro = request.GET.get('tecnico', '')
     if tecnico_filtro:
         planes = planes.filter(tecnico_asignado_id=tecnico_filtro)
 
-    # Filtro por estado
     estado_filtro = request.GET.get('estado', '')
     if estado_filtro == 'activos':
         planes = planes.filter(is_active=True)
     elif estado_filtro == 'inactivos':
         planes = planes.filter(is_active=False)
 
-    # Filtro por vencimiento
     vencimiento_filtro = request.GET.get('vencimiento', '')
     if vencimiento_filtro:
-        from django.utils import timezone
         from datetime import timedelta
         hoy = timezone.now()
         if vencimiento_filtro == 'vencidos':
@@ -989,17 +927,13 @@ def lista_planes(request):
                 is_active=True,
             )
 
-    # Ordenamiento
     orden = request.GET.get('orden', 'proxima_ejecucion')
     planes = planes.order_by(orden)
 
-    # Paginación
     paginator = Paginator(planes, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    # Contadores
-    from django.utils import timezone
     from datetime import timedelta
     hoy = timezone.now()
     total_planes = PlanMantenimiento.objects.count()
@@ -1013,7 +947,6 @@ def lista_planes(request):
         proxima_ejecucion__lte=hoy + timedelta(days=7),
     ).count()
 
-    # Query params
     query_params = request.GET.copy()
     if 'page' in query_params:
         del query_params['page']
@@ -1046,7 +979,6 @@ def detalle_plan(request, plan_id):
 
     plan = get_object_or_404(PlanMantenimiento, id=plan_id)
 
-    # El técnico solo puede ver planes de equipos donde tiene órdenes
     if request.user.rol_principal == 'TECNICO':
         tiene_ordenes = OrdenTrabajo.objects.filter(
             tecnico=request.user, equipo=plan.equipo
@@ -1055,7 +987,6 @@ def detalle_plan(request, plan_id):
             messages.error(request, 'No tienes permiso para ver este plan.')
             return redirect('mantenimiento:lista_planes')
 
-    # OTs generadas por este plan
     ordenes = plan.ordenes_generadas.select_related('tecnico', 'equipo').order_by('-fecha_programada')
 
     context = {
@@ -1073,7 +1004,6 @@ def crear_plan(request):
         messages.error(request, 'Solo los administradores pueden crear planes.')
         return redirect('mantenimiento:lista_planes')
 
-    # Pre-seleccionar equipo si viene por query param
     equipo_preseleccionado = request.GET.get('equipo', '')
 
     if request.method == 'POST':
@@ -1148,7 +1078,6 @@ def aplicar_plan(request, plan_id):
 
     plan = get_object_or_404(PlanMantenimiento, id=plan_id)
 
-    # Técnico: solo puede aplicar planes de equipos donde tiene órdenes
     if request.user.rol_principal == 'TECNICO':
         tiene_ordenes = OrdenTrabajo.objects.filter(
             tecnico=request.user, equipo=plan.equipo
@@ -1161,20 +1090,14 @@ def aplicar_plan(request, plan_id):
         messages.error(request, 'No puedes aplicar un plan inactivo.')
         return redirect('mantenimiento:detalle_plan', plan_id=plan.id)
 
-    from django.utils import timezone
     ahora = timezone.now()
 
-    # ✅ Determinar el técnico a asignar:
-    # 1. Si el plan tiene tecnico_asignado → usarlo
-    # 2. Si no, y el que aplica es TÉCNICO → asignarle a él
-    # 3. Si no, y el que aplica es ADMIN → dejar sin técnico (None)
     tecnico = None
     if plan.tecnico_asignado:
         tecnico = plan.tecnico_asignado
     elif request.user.rol_principal == 'TECNICO':
         tecnico = request.user
 
-    # Crear la Orden de Trabajo
     orden = OrdenTrabajo.objects.create(
         equipo=plan.equipo,
         tecnico=tecnico,
@@ -1187,11 +1110,9 @@ def aplicar_plan(request, plan_id):
         generada_por_sistema=False,
     )
 
-    # Actualizar el plan
     plan.ultima_ejecucion = ahora
-    plan.save()  # Recalcula proxima_ejecucion automáticamente
+    plan.save()
 
-    # Mensaje personalizado según quién quedó asignado
     if tecnico:
         mensaje = f'✅ Se creó la OT-{orden.id} y se asignó a {tecnico.get_full_name() or tecnico.username}.'
     else:
@@ -1200,76 +1121,7 @@ def aplicar_plan(request, plan_id):
     messages.success(request, mensaje)
     return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
 
-# =====================================================
-# RETIRO DE REPUESTOS DEL INVENTARIO
-# =====================================================
 
-@login_required
-def retirar_repuesto(request, repuesto_id):
-    """Permite al técnico retirar repuestos del inventario."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
-        messages.error(request, 'No tienes permiso para retirar repuestos.')
-        return redirect('mantenimiento:redirigir_por_rol')
-
-    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
-
-    if request.method == 'POST':
-        form = RetirarRepuestoForm(request.POST, repuesto=repuesto)
-        if form.is_valid():
-            cantidad = form.cleaned_data['cantidad']
-            motivo = form.cleaned_data.get('motivo', '')
-            cantidad_anterior = repuesto.cantidad_actual
-
-            # ✅ Actualizar stock
-            repuesto.cantidad_actual -= cantidad
-            repuesto.fecha_ultima_salida = timezone.now()
-            repuesto.save()
-
-            # ✅ Registrar movimiento (auditoría)
-            MovimientoRepuesto.objects.create(
-                repuesto=repuesto,
-                tipo='SALIDA',
-                cantidad=cantidad,
-                cantidad_anterior=cantidad_anterior,
-                cantidad_nueva=repuesto.cantidad_actual,
-                motivo=motivo,
-                usuario=request.user,
-            )
-
-            messages.success(
-                request,
-                f'✅ Se retiraron {cantidad} {repuesto.unidad_medida}(s) de "{repuesto.nombre}". '
-                f'Stock actual: {repuesto.cantidad_actual}.'
-            )
-            return redirect('mantenimiento:detalle_repuesto', repuesto_id=repuesto.id)
-    else:
-        form = RetirarRepuestoForm(repuesto=repuesto)
-
-    context = {
-        'form': form,
-        'repuesto': repuesto,
-    }
-    return render(request, 'mantenimiento/repuestos/retirar_repuesto.html', context)
-
-
-@login_required
-def historial_movimientos(request, repuesto_id):
-    """Muestra el historial de movimientos de un repuesto (auditoría)."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
-        messages.error(request, 'No tienes permiso para ver los movimientos.')
-        return redirect('mantenimiento:redirigir_por_rol')
-
-    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
-    movimientos = repuesto.movimientos.select_related(
-        'usuario', 'orden'
-    ).order_by('-created_at')
-
-    context = {
-        'repuesto': repuesto,
-        'movimientos': movimientos,
-        'total_movimientos': movimientos.count(),
-    }
-    return render(request, 'mantenimiento/repuestos/historial_movimientos.html', context)
 # =====================================================
 # CRUD DE ÓRDENES DE TRABAJO
 # =====================================================
@@ -1285,11 +1137,9 @@ def lista_ordenes(request):
         'equipo', 'tecnico', 'incidencia', 'plan'
     ).all()
 
-    # ✅ Técnico: solo ve sus propias órdenes
     if request.user.rol_principal == 'TECNICO':
         ordenes = ordenes.filter(tecnico=request.user)
 
-    # Búsqueda
     q = request.GET.get('q', '').strip()
     if q:
         ordenes = ordenes.filter(
@@ -1300,7 +1150,6 @@ def lista_ordenes(request):
             Q(tecnico__last_name__icontains=q)
         )
 
-    # Filtros
     estado_filtro = request.GET.get('estado', '')
     if estado_filtro:
         ordenes = ordenes.filter(estado=estado_filtro)
@@ -1321,16 +1170,13 @@ def lista_ordenes(request):
     if equipo_filtro:
         ordenes = ordenes.filter(equipo_id=equipo_filtro)
 
-    # Ordenamiento
     orden = request.GET.get('orden', '-fecha_programada')
     ordenes = ordenes.order_by(orden)
 
-    # Paginación
     paginator = Paginator(ordenes, 15)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    # Contadores
     base_qs = OrdenTrabajo.objects.all()
     if request.user.rol_principal == 'TECNICO':
         base_qs = base_qs.filter(tecnico=request.user)
@@ -1340,7 +1186,6 @@ def lista_ordenes(request):
     en_progreso = base_qs.filter(estado='PROGRESO').count()
     completadas = base_qs.filter(estado='COMPLETADA').count()
 
-    # Query params
     query_params = request.GET.copy()
     if 'page' in query_params:
         del query_params['page']
@@ -1376,12 +1221,10 @@ def detalle_orden(request, orden_id):
 
     orden = get_object_or_404(OrdenTrabajo, id=orden_id)
 
-    # Técnicos solo ven sus propias órdenes
     if request.user.rol_principal == 'TECNICO' and orden.tecnico != request.user:
         messages.error(request, 'No tienes permiso para ver esta orden.')
         return redirect('mantenimiento:lista_ordenes')
 
-    # Formset de repuestos usados (solo si la orden está activa)
     puede_editar_repuestos = orden.estado in ['PROGRAMADA', 'PROGRESO']
 
     if request.method == 'POST' and puede_editar_repuestos:
@@ -1393,7 +1236,6 @@ def detalle_orden(request, orden_id):
     else:
         formset = OrdenRepuestoFormSet(instance=orden)
 
-    # Repuestos usados y disponibles
     repuestos_usados = orden.repuestos_usados.select_related('repuesto')
     repuestos_disponibles = Repuesto.objects.filter(cantidad_actual__gt=0)
 
@@ -1421,7 +1263,6 @@ def crear_orden(request):
             messages.success(request, f'✅ Orden OT-{orden.id} creada correctamente.')
             return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
     else:
-        # Pre-seleccionar equipo/incidencia si vienen por query string
         initial = {}
         if request.GET.get('equipo'):
             initial['equipo'] = request.GET.get('equipo')
@@ -1507,15 +1348,68 @@ def cerrar_orden(request, orden_id):
 
     if request.method == 'POST':
         observaciones = request.POST.get('observaciones', '').strip()
-
         orden.fecha_cierre = timezone.now()
         orden.observaciones_cierre = observaciones
         orden.save()
-
         messages.success(request, f'✅ Orden OT-{orden.id} cerrada y aprobada.')
         return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
 
     return render(request, 'mantenimiento/ordenes/cerrar_orden.html', {'orden': orden})
+
+
+@login_required
+def cambiar_estado_orden(request, orden_id, nuevo_estado):
+    """Cambia el estado de una orden y aplica la lógica de negocio asociada."""
+    if request.user.rol_principal not in ['TECNICO', 'ADMIN']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    orden = get_object_or_404(OrdenTrabajo, id=orden_id)
+
+    if request.user.rol_principal == 'TECNICO' and orden.tecnico != request.user:
+        messages.error(request, 'No tienes permiso para modificar esta orden.')
+        return redirect('mantenimiento:dashboard_tecnico')
+
+    estados_validos = ['PROGRAMADA', 'PROGRESO', 'COMPLETADA', 'CANCELADA']
+    if nuevo_estado not in estados_validos:
+        messages.error(request, 'Estado no válido.')
+        return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
+
+    ahora = timezone.now()
+    equipo = orden.equipo
+
+    if nuevo_estado == 'PROGRESO':
+        orden.estado = 'PROGRESO'
+        orden.fecha_inicio = ahora
+        equipo.estado_operativo = 'MANTENIMIENTO'
+        equipo.bloqueado = True
+        messages.success(request, f'OT-{orden.id} iniciada. Equipo bloqueado en mantenimiento.')
+
+    elif nuevo_estado == 'COMPLETADA':
+        orden.estado = 'COMPLETADA'
+        orden.fecha_fin = ahora
+        if orden.fecha_inicio:
+            delta = ahora - orden.fecha_inicio
+            orden.duracion_horas = round(delta.total_seconds() / 3600, 2)
+        equipo.estado_operativo = 'ACTIVO'
+        equipo.bloqueado = False
+        equipo.ultimo_mantenimiento = ahora
+        if equipo.intervalo_mantenimiento_dias > 0:
+            from datetime import timedelta
+            equipo.proximo_mantenimiento = ahora + timedelta(days=equipo.intervalo_mantenimiento_dias)
+        messages.success(request, f'OT-{orden.id} completada. Equipo disponible.')
+
+    elif nuevo_estado == 'CANCELADA':
+        orden.estado = 'CANCELADA'
+        equipo.estado_operativo = 'ACTIVO'
+        equipo.bloqueado = False
+        messages.warning(request, f'OT-{orden.id} cancelada.')
+
+    orden.save()
+    equipo.save()
+
+    return redirect('mantenimiento:dashboard_tecnico')
+
+
 # =====================================================
 # GESTIÓN DE INCIDENCIAS (Admin y Técnico)
 # =====================================================
@@ -1527,11 +1421,8 @@ def lista_incidencias_admin(request):
         messages.error(request, 'No tienes permiso para ver esta sección.')
         return redirect('mantenimiento:redirigir_por_rol')
 
-    incidencias = Incidencia.objects.select_related(
-        'equipo', 'operario'
-    ).all()
+    incidencias = Incidencia.objects.select_related('equipo', 'operario').all()
 
-    # Búsqueda
     q = request.GET.get('q', '').strip()
     if q:
         incidencias = incidencias.filter(
@@ -1542,7 +1433,6 @@ def lista_incidencias_admin(request):
             Q(operario__last_name__icontains=q)
         )
 
-    # Filtros
     estado_filtro = request.GET.get('estado', '')
     if estado_filtro:
         incidencias = incidencias.filter(estado=estado_filtro)
@@ -1555,22 +1445,18 @@ def lista_incidencias_admin(request):
     if equipo_filtro:
         incidencias = incidencias.filter(equipo_id=equipo_filtro)
 
-    # Ordenamiento
     orden = request.GET.get('orden', '-fecha_reporte')
     incidencias = incidencias.order_by(orden)
 
-    # Paginación
     paginator = Paginator(incidencias, 15)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    # Contadores
     total = Incidencia.objects.count()
     pendientes = Incidencia.objects.filter(estado='PENDIENTE').count()
     en_revision = Incidencia.objects.filter(estado='REVISION').count()
     resueltas = Incidencia.objects.filter(estado='RESUELTA').count()
 
-    # Query params
     query_params = request.GET.copy()
     if 'page' in query_params:
         del query_params['page']
@@ -1602,8 +1488,6 @@ def detalle_incidencia(request, incidencia_id):
         return redirect('mantenimiento:redirigir_por_rol')
 
     incidencia = get_object_or_404(Incidencia, id=incidencia_id)
-
-    # OTs generadas desde esta incidencia (si las hay)
     ordenes = incidencia.ordenes.select_related('tecnico', 'equipo').order_by('-fecha_programada')
 
     context = {
@@ -1615,7 +1499,7 @@ def detalle_incidencia(request, incidencia_id):
 
 @login_required
 def cambiar_estado_incidencia(request, incidencia_id, nuevo_estado):
-    """Cambia el estado de una incidencia."""
+    """Cambia el estado de una incidencia con validaciones del flujo."""
     if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
         messages.error(request, 'No tienes permiso para modificar incidencias.')
         return redirect('mantenimiento:redirigir_por_rol')
@@ -1627,9 +1511,26 @@ def cambiar_estado_incidencia(request, incidencia_id, nuevo_estado):
         messages.error(request, 'Estado no válido.')
         return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
 
-    # ✅ Validación adicional: solo admin puede rechazar
     if nuevo_estado == 'RECHAZADA' and request.user.rol_principal != 'ADMIN':
         messages.error(request, 'Solo los administradores pueden rechazar incidencias.')
+        return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
+
+    tiene_orden_activa = incidencia.ordenes.exclude(estado='CANCELADA').exists()
+
+    if nuevo_estado == 'RESUELTA' and tiene_orden_activa:
+        messages.error(
+            request,
+            '❌ Esta incidencia tiene una Orden de Trabajo vinculada. '
+            'Se marcará como RESUELTA automáticamente cuando el administrador cierre la OT.'
+        )
+        return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
+
+    if nuevo_estado == 'PENDIENTE' and incidencia.estado == 'RESUELTA' and tiene_orden_activa:
+        messages.error(
+            request,
+            '❌ No puedes reabrir una incidencia que tiene una OT activa. '
+            'Primero cancela la OT.'
+        )
         return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
 
     incidencia.estado = nuevo_estado
@@ -1651,19 +1552,16 @@ def crear_ot_desde_incidencia(request, incidencia_id):
 
     incidencia = get_object_or_404(Incidencia, id=incidencia_id)
 
-    # Verificar que no tenga ya una OT asociada
     if incidencia.ordenes.exists():
         messages.warning(request, 'Esta incidencia ya tiene una Orden de Trabajo asociada.')
         return redirect('mantenimiento:detalle_incidencia', incidencia_id=incidencia.id)
 
     if request.method == 'POST':
-        # Recoger datos del formulario
         tecnico_id = request.POST.get('tecnico', '')
         prioridad = request.POST.get('prioridad', 'MEDIA')
         fecha_programada_str = request.POST.get('fecha_programada', '')
         descripcion = request.POST.get('descripcion', '').strip()
 
-        # Validaciones
         if not fecha_programada_str:
             messages.error(request, 'Debes indicar una fecha programada.')
             return redirect('mantenimiento:crear_ot_desde_incidencia', incidencia_id=incidencia.id)
@@ -1682,7 +1580,6 @@ def crear_ot_desde_incidencia(request, incidencia_id):
             except User.DoesNotExist:
                 pass
 
-        # Crear la OT
         orden = OrdenTrabajo.objects.create(
             equipo=incidencia.equipo,
             tecnico=tecnico,
@@ -1694,17 +1591,13 @@ def crear_ot_desde_incidencia(request, incidencia_id):
             estado='PROGRAMADA',
         )
 
-        # Marcar la incidencia como "en revisión"
         incidencia.estado = 'REVISION'
         incidencia.save()
 
         messages.success(request, f'✅ Se creó la OT-{orden.id} desde la incidencia #{incidencia.id}.')
         return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
 
-    # GET: mostrar formulario
-    from django.utils import timezone
     from datetime import timedelta
-
     context = {
         'incidencia': incidencia,
         'tecnicos': User.objects.filter(rol_principal='TECNICO', is_active=True),

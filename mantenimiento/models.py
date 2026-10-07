@@ -403,6 +403,13 @@ class OrdenTrabajo(models.Model):
 
     def __str__(self):
         return f"OT-{self.id} ({self.equipo.codigo_interno}) - {self.get_estado_display()}"
+    
+    def recalcular_costo_total(self):
+        """Calcula el costo total sumando los subtotales de los repuestos usados."""
+        total = sum(r.subtotal for r in self.repuestos_usados.all())
+        self.costo_total = total
+        self.save(update_fields=['costo_total'])
+        return total
 
 
 # =====================================================
@@ -482,27 +489,24 @@ class Alerta(models.Model):
     tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
     mensaje = models.TextField()
     repuesto = models.ForeignKey(
-        Repuesto,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='alertas'
+        Repuesto, on_delete=models.CASCADE,
+        null=True, blank=True, related_name='alertas'
     )
     equipo = models.ForeignKey(
-        Equipo,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='alertas'
+        Equipo, on_delete=models.CASCADE,
+        null=True, blank=True, related_name='alertas'
     )
     plan = models.ForeignKey(
-        PlanMantenimiento,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='alertas'
+        PlanMantenimiento, on_delete=models.CASCADE,
+        null=True, blank=True, related_name='alertas'
     )
-    leida = models.BooleanField(default=False)
+    # ✅ NUEVO: M2M en lugar de booleano
+    leida_por = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='alertas_leidas',
+        help_text='Usuarios que ya marcaron esta alerta como leída'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -513,6 +517,10 @@ class Alerta(models.Model):
 
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.mensaje[:50]}"
+
+    def esta_leida_por(self, user):
+        """Devuelve True si el usuario ya marcó esta alerta como leída."""
+        return self.leida_por.filter(pk=user.pk).exists()
 
 # =====================================================
 # ATRIBUTOS DINÁMICOS DE EQUIPO (clave-valor)
