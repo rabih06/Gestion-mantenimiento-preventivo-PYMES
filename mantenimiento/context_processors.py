@@ -2,13 +2,16 @@ from .models import Alerta
 
 
 def alertas_no_leidas(request):
-    """Contador global de alertas no leídas PARA EL USUARIO ACTUAL."""
+    """Contador de notificaciones no leídas PARA EL USUARIO ACTUAL."""
     if not request.user.is_authenticated:
         return {'alertas_count': 0}
 
-    if request.user.rol_principal in ['ADMIN', 'TECNICO']:
-        count = Alerta.objects.exclude(leida_por=request.user).count()
-    else:
-        count = 0
+    # Usar el manager personalizado que filtra por visibilidad
+    count = (
+        Alerta.objects
+        .visibles_para(request.user)
+        .exclude(leida_por=request.user)
+        .count()
+    )
 
     return {'alertas_count': count}

@@ -25,19 +25,17 @@
         {% if user.is_authenticated %}
             <div class="d-flex align-items-center">
 
-                <!-- Badge de alertas (solo ADMIN y TECNICO) -->
-                {% if user.rol_principal == 'ADMIN' or user.rol_principal == 'TECNICO' %}
-                    <a href="{% url 'mantenimiento:lista_alertas' %}"
-                       class="btn btn-outline-light btn-sm me-3 position-relative"
-                       title="Ver alertas">
-                        <i class="bi bi-bell"></i>
-                        {% if alertas_count > 0 %}
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                                {{ alertas_count }}
-                            </span>
-                        {% endif %}
-                    </a>
-                {% endif %}
+                <!-- ✅ Badge de alertas: ahora para TODOS los roles -->
+                <a href="{% url 'mantenimiento:lista_alertas' %}"
+                   class="btn btn-outline-light btn-sm me-3 position-relative"
+                   title="Ver notificaciones">
+                    <i class="bi bi-bell"></i>
+                    {% if alertas_count > 0 %}
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                            {{ alertas_count }}
+                        </span>
+                    {% endif %}
+                </a>
 
                 <!-- Nombre y rol del usuario -->
                 <span class="text-white me-3">
@@ -76,7 +74,7 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
-                                <i class="bi bi-bell"></i> Alertas
+                                <i class="bi bi-bell"></i> Notificaciones
                                 {% if alertas_count > 0 %}
                                     <span class="badge bg-danger ms-2">{{ alertas_count }}</span>
                                 {% endif %}
@@ -134,7 +132,7 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
-                                <i class="bi bi-bell"></i> Alertas
+                                <i class="bi bi-bell"></i> Notificaciones
                                 {% if alertas_count > 0 %}
                                     <span class="badge bg-danger ms-2">{{ alertas_count }}</span>
                                 {% endif %}
@@ -178,6 +176,14 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:lista_incidencias' %}">
                                 <i class="bi bi-list-check"></i> Mis Reportes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
+                                <i class="bi bi-bell"></i> Notificaciones
+                                {% if alertas_count > 0 %}
+                                    <span class="badge bg-danger ms-2">{{ alertas_count }}</span>
+                                {% endif %}
                             </a>
                         </li>
                         <li class="nav-item">
