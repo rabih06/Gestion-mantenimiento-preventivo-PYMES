@@ -122,10 +122,11 @@ class HistorialEstadoEquipoAdmin(admin.ModelAdmin):
 
 @admin.register(Alerta)
 class AlertaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'tipo', 'mensaje_corto', 'leida', 'created_at')
-    list_filter = ('tipo', 'leida', 'created_at')
+    list_display = ('id', 'tipo', 'mensaje_corto', 'created_at')
+    list_filter = ('tipo', 'created_at')
     search_fields = ('mensaje',)
     readonly_fields = ('created_at',)
+    filter_horizontal = ('leida_por',)
 
     def mensaje_corto(self, obj):
         return obj.mensaje[:60]

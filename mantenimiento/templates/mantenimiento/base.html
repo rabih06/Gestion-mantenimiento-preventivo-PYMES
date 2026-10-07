@@ -46,7 +46,7 @@
                     <span class="badge bg-secondary ms-1">{{ user.get_rol_principal_display }}</span>
                 </span>
 
-                <!-- Botón de logout (POST por seguridad Django 5.x) -->
+                <!-- Botón de logout -->
                 <form method="post" action="{% url 'logout' %}" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-light btn-sm">
@@ -60,7 +60,7 @@
     <!-- Contenido principal -->
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar (solo si el usuario está autenticado) -->
+            <!-- Sidebar -->
             {% if user.is_authenticated %}
             <div class="col-md-2 sidebar p-3">
                 <ul class="nav flex-column">
@@ -91,11 +91,11 @@
                             <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">
                                 <i class="bi bi-cpu"></i> Equipos
                             </a>
+                        </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:lista_planes' %}">
                                 <i class="bi bi-calendar-event"></i> Planes
                             </a>
-                        </li>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:lista_repuestos' %}">
@@ -104,9 +104,8 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:lista_proveedores' %}">
-                                <i class="bi bi-truck">
-                                </i> Proveedores
-                             </a>
+                                <i class="bi bi-truck"></i> Proveedores
+                            </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:lista_ordenes' %}">
@@ -125,45 +124,42 @@
                     {% elif user.rol_principal == 'TECNICO' %}
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'mantenimiento:dashboard_tecnico' %}">
-                                <i class="bi bi-kanban">
-                                </i> Mis Órdenes</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'mantenimiento:lista_ordenes' %}">
-                                    <i class="bi bi-list-check"></i> Todas mis OTs
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
-                                    <i class="bi bi-bell">
-                                    </i> Alertas...
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'mantenimiento:lista_incidencias_admin' %}">
-                                    <i class="bi bi-exclamation-triangle"></i> Incidencias
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">
-                                    <i class="bi bi-cpu">
-                                    </i> Equipos</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'mantenimiento:lista_planes' %}">
-                                    <i class="bi bi-calendar-event"></i> Planes
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'mantenimiento:lista_repuestos' %}">
-                                    <i class="bi bi-box-seam">
-                                    </i> Repuestos</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'mantenimiento:lista_proveedores' %}">
-                                    <i class="bi bi-truck">
-                                    </i> Proveedores</a>
-                            </li>
+                                <i class="bi bi-kanban"></i> Mis Órdenes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_ordenes' %}">
+                                <i class="bi bi-list-check"></i> Todas mis OTs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
+                                <i class="bi bi-bell"></i> Alertas
+                                {% if alertas_count > 0 %}
+                                    <span class="badge bg-danger ms-2">{{ alertas_count }}</span>
+                                {% endif %}
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_incidencias_admin' %}">
+                                <i class="bi bi-exclamation-triangle"></i> Incidencias
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">
+                                <i class="bi bi-cpu"></i> Equipos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_planes' %}">
+                                <i class="bi bi-calendar-event"></i> Planes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_repuestos' %}">
+                                <i class="bi bi-box-seam"></i> Repuestos
+                            </a>
+                        </li>
 
                     {# ============================================ #}
                     {# SIDEBAR DEL OPERARIO                          #}
