@@ -69,8 +69,13 @@ def dashboard_admin(request):
         estado__in=['PROGRAMADA', 'PROGRESO']
     ).count()
 
-    # ✅ Alertas NO leídas por el admin actual
-    alertas_activas = Alerta.objects.exclude(leida_por=request.user).count()
+# ✅ Alertas visibles para el usuario actual
+    alertas_activas = (
+        Alerta.objects
+        .visibles_para(request.user)
+        .exclude(leida_por=request.user)
+        .count()
+    )
 
     # =====================================================
     # KPIs SECUNDARIOS
@@ -98,7 +103,12 @@ def dashboard_admin(request):
     # ÚLTIMAS ÓRDENES Y ALERTAS
     # =====================================================
     ultimas_ordenes = OrdenTrabajo.objects.all().order_by('-fecha_programada')[:5]
-    ultimas_alertas = Alerta.objects.exclude(leida_por=request.user).order_by('-created_at')[:5]
+    ultimas_alertas = (
+    Alerta.objects
+    .visibles_para(request.user)
+    .exclude(leida_por=request.user)
+    .order_by('-created_at')[:5]
+)
 
     context = {
         'total_equipos': total_equipos,
@@ -121,7 +131,12 @@ def dashboard_tecnico(request):
         return redirect('mantenimiento:redirigir_por_rol')
 
     # ✅ Alertas no leídas por el técnico actual
-    alertas_no_leidas = Alerta.objects.exclude(leida_por=request.user).count()
+    alertas_no_leidas = (
+    Alerta.objects
+    .visibles_para(request.user)
+    .exclude(leida_por=request.user)
+    .count()
+)
 
     ordenes = OrdenTrabajo.objects.filter(
         tecnico=request.user
@@ -159,10 +174,18 @@ def dashboard_operario(request):
 
     equipos = request.user.equipos_asignados.all()
     incidencias = request.user.incidencias_reportadas.all().order_by('-fecha_reporte')[:10]
+    # ✅ Notificaciones para el operario
+    alertas_no_leidas = (
+        Alerta.objects
+        .visibles_para(request.user)
+        .exclude(leida_por=request.user)
+        .count()
+    )
 
     context = {
         'equipos': equipos,
         'incidencias': incidencias,
+        'alertas_no_leidas': alertas_no_leidas,
     }
     return render(request, 'mantenimiento/dashboard_operario.html', context)
 
@@ -217,11 +240,12 @@ def lista_incidencias(request):
 
 @login_required
 def lista_alertas(request):
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
-        messages.error(request, 'No tienes permiso para ver las alertas.')
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OPERARIO']:
+        messages.error(request, 'No tienes permiso para ver las notificaciones.')
         return redirect('mantenimiento:redirigir_por_rol')
 
-    alertas = Alerta.objects.select_related(
+    # ✅ Filtrar por visibilidad del usuario actual
+    alertas_qs = Alerta.objects.visibles_para(request.user).select_related(
         'repuesto', 'equipo', 'plan'
     ).order_by('-created_at')
 
@@ -229,19 +253,21 @@ def lista_alertas(request):
     estado_filtro = request.GET.get('estado', '')
 
     if tipo_filtro:
-        alertas = alertas.filter(tipo=tipo_filtro)
+        alertas_qs = alertas_qs.filter(tipo=tipo_filtro)
 
     if estado_filtro == 'leidas':
-        alertas = alertas.filter(leida_por=request.user)
+        alertas_qs = alertas_qs.filter(leida_por=request.user)
     elif estado_filtro == 'no_leidas':
-        alertas = alertas.exclude(leida_por=request.user)
+        alertas_qs = alertas_qs.exclude(leida_por=request.user)
 
-    total_alertas = Alerta.objects.count()
-    no_leidas = Alerta.objects.exclude(leida_por=request.user).count()
-    leidas = Alerta.objects.filter(leida_por=request.user).count()
+    # Contadores personalizados
+    base_qs = Alerta.objects.visibles_para(request.user)
+    total_alertas = base_qs.count()
+    no_leidas = base_qs.exclude(leida_por=request.user).count()
+    leidas = base_qs.filter(leida_por=request.user).count()
 
     context = {
-        'alertas': alertas,
+        'alertas': alertas_qs,
         'tipo_filtro': tipo_filtro,
         'estado_filtro': estado_filtro,
         'tipos_alerta': Alerta.TIPO_CHOICES,
@@ -254,41 +280,47 @@ def lista_alertas(request):
 
 @login_required
 def marcar_alerta_leida(request, alerta_id):
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
-        return redirect('mantenimiento:redirigir_por_rol')
-
     alerta = get_object_or_404(Alerta, id=alerta_id)
+    
+    # ✅ Verificar que el usuario puede ver esta alerta
+    if not alerta.es_visible_para(request.user):
+        messages.error(request, 'No tienes permiso para modificar esta notificación.')
+        return redirect('mantenimiento:lista_alertas')
+    
     alerta.leida_por.add(request.user)
-    messages.success(request, 'Alerta marcada como leída.')
+    messages.success(request, 'Notificación marcada como leída.')
 
     return redirect(request.META.get('HTTP_REFERER', 'mantenimiento:lista_alertas'))
 
 
 @login_required
 def marcar_todas_leidas(request):
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
-        return redirect('mantenimiento:redirigir_por_rol')
-
     if request.method == 'POST':
-        pendientes = Alerta.objects.exclude(leida_por=request.user)
+        # ✅ Solo marcar las visibles para este usuario
+        pendientes = (
+            Alerta.objects
+            .visibles_para(request.user)
+            .exclude(leida_por=request.user)
+        )
         cantidad = pendientes.count()
         for alerta in pendientes:
             alerta.leida_por.add(request.user)
-        messages.success(request, f'{cantidad} alertas marcadas como leídas.')
+        messages.success(request, f'{cantidad} notificaciones marcadas como leídas.')
 
     return redirect('mantenimiento:lista_alertas')
 
 
 @login_required
 def eliminar_alerta(request, alerta_id):
-    """Elimina una alerta."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
-        return redirect('mantenimiento:redirigir_por_rol')
-
     alerta = get_object_or_404(Alerta, id=alerta_id)
+    
+    # ✅ Solo admin puede eliminar notificaciones
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden eliminar notificaciones.')
+        return redirect('mantenimiento:lista_alertas')
+    
     alerta.delete()
-    messages.success(request, 'Alerta eliminada.')
-
+    messages.success(request, 'Notificación eliminada.')
     return redirect('mantenimiento:lista_alertas')
 
 
@@ -375,7 +407,13 @@ def detalle_equipo(request, equipo_id):
     atributos = equipo.atributos.all()
     historial_estados = equipo.historial_estados.order_by('-fecha_cambio')[:10]
     # ✅ Alertas NO leídas por el usuario actual
-    alertas = equipo.alertas.exclude(leida_por=request.user).order_by('-created_at')[:5]
+    alertas = (
+        Alerta.objects
+        .visibles_para(request.user)
+        .filter(equipo=equipo)
+        .exclude(leida_por=request.user)
+        .order_by('-created_at')[:5]
+    )
 
     context = {
         'equipo': equipo,
@@ -557,7 +595,13 @@ def detalle_repuesto(request, repuesto_id):
     ).order_by('-created_at')[:20]
 
     # ✅ FIX: era equipo.alertas → debe ser repuesto.alertas
-    alertas = repuesto.alertas.exclude(leida_por=request.user).order_by('-created_at')
+    alertas = (
+        Alerta.objects
+        .visibles_para(request.user)
+        .filter(repuesto=repuesto)
+        .exclude(leida_por=request.user)
+        .order_by('-created_at')
+    )
 
     total_usado = sum(u.cantidad_utilizada for u in repuesto.ordenes_usadas.all())
 

@@ -476,14 +476,57 @@ class HistorialEstadoEquipo(models.Model):
 
 
 # =====================================================
-# ALERTAS GENERADAS POR EL SISTEMA AUTOMÁTICO
+# ALERTAS Y NOTIFICACIONES
 # =====================================================
+
+# =====================================================
+# ALERTAS Y NOTIFICACIONES
+# =====================================================
+
+class AlertaQuerySet(models.QuerySet):
+    """QuerySet personalizado para filtrado de alertas."""
+    
+    def visibles_para(self, user):
+        """Devuelve las alertas visibles para un usuario según su rol."""
+        from django.db.models import Q
+        
+        if not user.is_authenticated:
+            return self.none()
+        
+        if user.rol_principal in ['ADMIN', 'TECNICO']:
+            # Admin y Técnico ven:
+            # - Las específicamente dirigidas a ellos
+            # - Las que no tienen destinatarios (alertas globales del sistema)
+            return self.filter(
+                Q(destinatarios=user) | Q(destinatarios__isnull=True)
+            ).distinct()
+        else:
+            # Operario solo ve las específicamente dirigidas a él
+            return self.filter(destinatarios=user).distinct()
+
+
+class AlertaManager(models.Manager):
+    def get_queryset(self):
+        return AlertaQuerySet(self.model, using=self._db)
+    
+    def visibles_para(self, user):
+        return self.get_queryset().visibles_para(user)
+
+
 class Alerta(models.Model):
     TIPO_CHOICES = [
         ('STOCK_BAJO', 'Stock bajo'),
         ('MANTENIMIENTO_PROXIMO', 'Mantenimiento próximo'),
         ('MANTENIMIENTO_VENCIDO', 'Mantenimiento vencido'),
         ('EQUIPO_CRITICO', 'Equipo en estado crítico'),
+        # ✅ NUEVOS TIPOS
+        ('EQUIPO_BAJA', 'Equipo dado de baja'),
+        ('EQUIPO_FUERA_SERVICIO', 'Equipo fuera de servicio'),
+        ('EQUIPO_EN_MANTENIMIENTO', 'Equipo en mantenimiento'),
+        ('OT_INICIADA', 'Orden de trabajo iniciada'),
+        ('OT_COMPLETADA', 'Orden de trabajo completada'),
+        ('NUEVA_INCIDENCIA', 'Nueva incidencia reportada'),
+        ('INCIDENCIA_RESUELTA', 'Incidencia resuelta'),
         ('OTRA', 'Otra'),
     ]
     tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
@@ -500,27 +543,51 @@ class Alerta(models.Model):
         PlanMantenimiento, on_delete=models.CASCADE,
         null=True, blank=True, related_name='alertas'
     )
-    # ✅ NUEVO: M2M en lugar de booleano
+    
+    # ✅ Usuarios que YA leyeron la alerta
     leida_por = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
         related_name='alertas_leidas',
         help_text='Usuarios que ya marcaron esta alerta como leída'
     )
+    
+    # ✅ NUEVO: Usuarios destinatarios específicos
+    # Si está vacío → la ven ADMIN y TECNICO por defecto
+    destinatarios = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='notificaciones_recibidas',
+        help_text='Usuarios que deben recibir esta notificación. '
+                  'Si está vacío, se envía a admin y técnicos por defecto.'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
-
+    
+    objects = AlertaManager()
+    
     class Meta:
         db_table = 'alertas'
         verbose_name = 'Alerta'
         verbose_name_plural = 'Alertas'
         ordering = ['-created_at']
-
+    
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.mensaje[:50]}"
-
+    
     def esta_leida_por(self, user):
         """Devuelve True si el usuario ya marcó esta alerta como leída."""
         return self.leida_por.filter(pk=user.pk).exists()
+    
+    def es_visible_para(self, user):
+        """Devuelve True si el usuario puede ver esta alerta."""
+        if not user.is_authenticated:
+            return False
+        # Si no tiene destinatarios → es global → visible para admin y técnicos
+        if not self.destinatarios.exists():
+            return user.rol_principal in ['ADMIN', 'TECNICO']
+        # Si tiene destinatarios → solo ellos la ven
+        return self.destinatarios.filter(pk=user.pk).exists()
 
 # =====================================================
 # ATRIBUTOS DINÁMICOS DE EQUIPO (clave-valor)
