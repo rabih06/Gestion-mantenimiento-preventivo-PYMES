@@ -1,0 +1,59 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Ejecutar Generación{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm border-success">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0"><i class="bi bi-robot"></i> Confirmar Generación Automática</h4>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <h5 class="alert-heading"><i class="bi bi-info-circle"></i> ¿Qué va a pasar?</h5>
+                    <p class="mb-0">
+                        El sistema revisará los planes de mantenimiento vencidos y creará
+                        automáticamente las Órdenes de Trabajo correspondientes.
+                    </p>
+                </div>
+
+                <div class="alert alert-warning">
+                    <h5 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Planes a procesar</h5>
+                    <p class="mb-0">
+                        Se van a procesar <strong>{{ pueden_generarse }}</strong>
+                        plan(es) que vencen en los próximos <strong>{{ dias_adelante }}</strong>
+                        día(s) (incluyendo vencidos).
+                    </p>
+                </div>
+
+                <div class="alert alert-success">
+                    <i class="bi bi-lightbulb"></i>
+                    <strong>Ventajas:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Se marcarán como <code>generada_por_sistema = True</code></li>
+                        <li>Se notificará al admin y al técnico asignado</li>
+                        <li>El plan se reprograma automáticamente</li>
+                        <li>Si un plan ya tiene OT activa, se omite para evitar duplicados</li>
+                    </ul>
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="dias_adelante" value="{{ dias_adelante }}">
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'mantenimiento:preview_ots_automaticas' %}" 
+                           class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-success btn-lg"
+                                onclick="return confirm('¿Confirmas generar las OTs ahora?')">
+                            <i class="bi bi-play-fill"></i> Ejecutar Generación
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -451,16 +451,59 @@ class OrdenTrabajoForm(forms.ModelForm):
 
 
 # =====================================================
-# FORMSET DE REPUESTOS USADOS EN UNA ORDEN
+# FORMULARIO DE REPUESTO USADO EN ORDEN
 # =====================================================
+class OrdenRepuestoForm(forms.ModelForm):
+    """Formulario individual para añadir un repuesto a una OT."""
+
+    class Meta:
+        model = OrdenRepuesto
+        fields = ['repuesto', 'cantidad_utilizada']
+        widgets = {
+            'repuesto': forms.Select(attrs={
+                'class': 'form-select select2-searchable',
+                'data-placeholder': 'Buscar repuesto por SKU o nombre...',
+            }),
+            'cantidad_utilizada': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 1,
+                'placeholder': 'Cantidad',
+            }),
+        }
+        labels = {
+            'repuesto': 'Repuesto',
+            'cantidad_utilizada': 'Cantidad',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # ✅ Filtrar: solo repuestos con stock > 0 (o el ya seleccionado si edita)
+        queryset = Repuesto.objects.filter(cantidad_actual__gt=0)
+
+        # Si estamos editando una OrdenRepuesto existente, incluir su repuesto actual
+        if self.instance.pk and self.instance.repuesto:
+            from django.db.models import Q
+            queryset = Repuesto.objects.filter(
+                Q(cantidad_actual__gt=0) | Q(pk=self.instance.repuesto.pk)
+            )
+
+        self.fields['repuesto'].queryset = queryset.order_by('nombre')
+
+        # ✅ Personalizar la etiqueta de cada opción: SKU - Nombre (Stock: X)
+        self.fields['repuesto'].label_from_instance = lambda obj: (
+            f"{obj.codigo_sku} | {obj.nombre} "
+            f"(Stock: {obj.cantidad_actual} {obj.unidad_medida})"
+        )
+
+        # Hacer el campo no obligatorio si ya está marcado para eliminar
+        # (permite guardar formset con filas vacías)
+
+
 OrdenRepuestoFormSet = inlineformset_factory(
     OrdenTrabajo,
     OrdenRepuesto,
-    fields=['repuesto', 'cantidad_utilizada'],
+    form=OrdenRepuestoForm,
     extra=1,
     can_delete=True,
-    widgets={
-        'repuesto': forms.Select(attrs={'class': 'form-select'}),
-        'cantidad_utilizada': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
-    },
 )
