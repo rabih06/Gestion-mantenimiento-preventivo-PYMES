@@ -4,6 +4,7 @@ from . import views
 app_name = 'mantenimiento'
 
 urlpatterns = [
+    path('', views.home_view, name='home'),   # ← ✅ NUEVA RUTA
     path('login/', views.login_view, name='login'),
     path('redirigir/', views.redirigir_por_rol, name='redirigir_por_rol'),
     path('dashboard/admin/', views.dashboard_admin, name='dashboard_admin'),
