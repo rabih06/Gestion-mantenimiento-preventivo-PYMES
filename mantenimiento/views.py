@@ -1802,3 +1802,9 @@ def ejecutar_generacion_ots(request):
         'pueden_generarse': pueden_generarse,
     }
     return render(request, 'mantenimiento/generacion/ejecutar_generacion.html', context)    
+
+def home_view(request):
+    """Redirige al usuario según su estado de autenticación."""
+    if request.user.is_authenticated:
+        return redirect('mantenimiento:redirigir_por_rol')
+    return redirect('mantenimiento:login')
