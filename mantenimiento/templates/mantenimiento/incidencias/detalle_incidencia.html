@@ -2,19 +2,24 @@
 {% block title %}Incidencia #{{ incidencia.id }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<!-- ============================================== -->
+<!-- ENCABEZADO                                      -->
+<!-- ============================================== -->
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
-        <h1><i class="bi bi-exclamation-triangle"></i> Incidencia #{{ incidencia.id }}</h1>
-        <p class="text-muted mb-0">
+        <h1 class="mb-2">
+            <i class="bi bi-exclamation-triangle"></i> Incidencia #{{ incidencia.id }}
+        </h1>
+        <div class="d-flex gap-2 flex-wrap">
             <span class="badge bg-{% if incidencia.prioridad == 'CRITICA' %}danger{% elif incidencia.prioridad == 'ALTA' %}warning{% elif incidencia.prioridad == 'MEDIA' %}info{% else %}secondary{% endif %}">
-                {{ incidencia.get_prioridad_display }}
+                Prioridad: {{ incidencia.get_prioridad_display }}
             </span>
             <span class="badge bg-{% if incidencia.estado == 'RESUELTA' %}success{% elif incidencia.estado == 'PENDIENTE' %}warning{% elif incidencia.estado == 'REVISION' %}info{% else %}secondary{% endif %}">
-                {{ incidencia.get_estado_display }}
+                Estado: {{ incidencia.get_estado_display }}
             </span>
-        </p>
+        </div>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
         <a href="{% url 'mantenimiento:lista_incidencias_admin' %}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Volver
         </a>
@@ -28,10 +33,16 @@
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-8">
+<!-- ============================================== -->
+<!-- CONTENIDO PRINCIPAL                             -->
+<!-- ============================================== -->
+<div class="row g-3">
+    <!-- ============================================ -->
+    <!-- COLUMNA IZQUIERDA                             -->
+    <!-- ============================================ -->
+    <div class="col-lg-8">
         <!-- Descripción de la falla -->
-        <div class="card shadow-sm mb-4">
+        <div class="card shadow-sm mb-3">
             <div class="card-header bg-danger text-white">
                 <h5 class="mb-0"><i class="bi bi-card-text"></i> Descripción de la Falla</h5>
             </div>
@@ -42,13 +53,13 @@
 
         <!-- Órdenes generadas -->
         {% if ordenes %}
-        <div class="card shadow-sm mb-4">
+        <div class="card shadow-sm mb-3">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Órdenes Generadas</h5>
                 <span class="badge bg-secondary">{{ ordenes|length }}</span>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 align-middle">
                     <thead class="table-light">
                         <tr>
                             <th>OT</th>
@@ -61,9 +72,17 @@
                         {% for orden in ordenes %}
                             <tr>
                                 <td>
-                                    <a href="{% url 'mantenimiento:detalle_orden' orden.id %}">OT-{{ orden.id }}</a>
+                                    <a href="{% url 'mantenimiento:detalle_orden' orden.id %}">
+                                        <strong>OT-{{ orden.id }}</strong>
+                                    </a>
                                 </td>
-                                <td>{{ orden.tecnico.get_full_name|default:"Sin asignar" }}</td>
+                                <td>
+                                    {% if orden.tecnico %}
+                                        {{ orden.tecnico.get_full_name|default:orden.tecnico.username }}
+                                    {% else %}
+                                        <span class="text-muted">Sin asignar</span>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     <span class="badge bg-{% if orden.estado == 'COMPLETADA' %}success{% elif orden.estado == 'PROGRESO' %}primary{% elif orden.estado == 'CANCELADA' %}secondary{% else %}warning{% endif %}">
                                         {{ orden.get_estado_display }}
@@ -80,67 +99,71 @@
 
         <!-- Acciones de cambio de estado -->
         {% if user.rol_principal == 'ADMIN' or user.rol_principal == 'TECNICO' %}
-            <div class="card shadow-sm">
+        <div class="card shadow-sm">
             <div class="card-header bg-white">
                 <h5 class="mb-0"><i class="bi bi-gear"></i> Acciones</h5>
             </div>
             <div class="card-body">
-            {% if ordenes %}
-                <div class="alert alert-info mb-3">
-                    <i class="bi bi-info-circle"></i>
-                    Esta incidencia tiene una OT vinculada. Se marcará como
-                    <strong>RESUELTA</strong> automáticamente cuando el administrador
-                    cierre la orden.
+                {% if ordenes %}
+                    <div class="alert alert-info mb-3">
+                        <i class="bi bi-info-circle"></i>
+                        Esta incidencia tiene una OT vinculada. Se marcará como
+                        <strong>RESUELTA</strong> automáticamente cuando el administrador
+                        cierre la orden.
+                    </div>
+                {% endif %}
+
+                <p class="text-muted small mb-2">Cambiar el estado de la incidencia:</p>
+                <div class="d-flex flex-wrap gap-2">
+
+                    <!-- En Revisión (Admin y Técnico) -->
+                    {% if incidencia.estado != 'REVISION' %}
+                        <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'REVISION' %}"
+                           class="btn btn-outline-info btn-sm"
+                           onclick="return confirm('¿Marcar como En Revisión?')">
+                            <i class="bi bi-search"></i> En Revisión
+                        </a>
+                    {% endif %}
+
+                    <!-- Resuelta (Admin y Técnico, PERO solo si NO tiene OT) -->
+                    {% if incidencia.estado != 'RESUELTA' and not ordenes %}
+                        <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'RESUELTA' %}"
+                           class="btn btn-outline-success btn-sm"
+                           onclick="return confirm('¿Marcar como Resuelta?')">
+                            <i class="bi bi-check-circle"></i> Resuelta
+                        </a>
+                    {% endif %}
+
+                    <!-- Rechazada (SOLO Admin) -->
+                    {% if incidencia.estado != 'RECHAZADA' and user.rol_principal == 'ADMIN' %}
+                        <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'RECHAZADA' %}"
+                           class="btn btn-outline-secondary btn-sm"
+                           onclick="return confirm('¿Marcar como Rechazada?')">
+                            <i class="bi bi-x-circle"></i> Rechazada
+                        </a>
+                    {% endif %}
+
+                    <!-- Pendiente (SOLO Admin) -->
+                    {% if incidencia.estado != 'PENDIENTE' and user.rol_principal == 'ADMIN' and not ordenes %}
+                        <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'PENDIENTE' %}"
+                           class="btn btn-outline-warning btn-sm"
+                           onclick="return confirm('¿Volver a marcar como Pendiente?')">
+                            <i class="bi bi-arrow-counterclockwise"></i> Pendiente
+                        </a>
+                    {% endif %}
+
                 </div>
-            {% endif %}
-
-            <p class="text-muted small">Cambiar el estado de la incidencia:</p>
-            <div class="d-flex flex-wrap gap-2">
-
-                <!-- En Revisión (Admin y Técnico) -->
-                {% if incidencia.estado != 'REVISION' %}
-                    <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'REVISION' %}"
-                        class="btn btn-outline-info btn-sm"
-                        onclick="return confirm('¿Marcar como En Revisión?')">
-                        <i class="bi bi-search"></i> En Revisión
-                    </a>
-                {% endif %}
-
-                <!-- Resuelta (Admin y Técnico, PERO solo si NO tiene OT) -->
-                {% if incidencia.estado != 'RESUELTA' and not ordenes %}
-                    <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'RESUELTA' %}"
-                        class="btn btn-outline-success btn-sm"
-                        onclick="return confirm('¿Marcar como Resuelta?')">
-                        <i class="bi bi-check-circle"></i> Resuelta
-                    </a>
-                {% endif %}
-
-                <!-- Rechazada (SOLO Admin) -->
-                {% if incidencia.estado != 'RECHAZADA' and user.rol_principal == 'ADMIN' %}
-                    <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'RECHAZADA' %}"
-                        class="btn btn-outline-secondary btn-sm"
-                        onclick="return confirm('¿Marcar como Rechazada?')">
-                        <i class="bi bi-x-circle"></i> Rechazada
-                    </a>
-                {% endif %}
-
-                <!-- Pendiente (SOLO Admin) -->
-                {% if incidencia.estado != 'PENDIENTE' and user.rol_principal == 'ADMIN' and not ordenes %}
-                    <a href="{% url 'mantenimiento:cambiar_estado_incidencia' incidencia.id 'PENDIENTE' %}"
-                        class="btn btn-outline-warning btn-sm"
-                        onclick="return confirm('¿Volver a marcar como Pendiente?')">
-                        <i class="bi bi-arrow-counterclockwise"></i> Pendiente
-                </a>
-            {% endif %} 
-
             </div>
         </div>
+        {% endif %}
     </div>
-    {% endif %}
 
-    <div class="col-md-4">
-        <!-- Info de la incidencia -->
-        <div class="card shadow-sm mb-4">
+    <!-- ============================================ -->
+    <!-- COLUMNA DERECHA                               -->
+    <!-- ============================================ -->
+    <div class="col-lg-4">
+        <!-- Información -->
+        <div class="card shadow-sm mb-3">
             <div class="card-header bg-primary text-white">
                 <h5 class="mb-0"><i class="bi bi-info-circle"></i> Información</h5>
             </div>
@@ -153,6 +176,18 @@
                     <span class="text-muted">Reportado por</span>
                     <strong>{{ incidencia.operario.get_full_name|default:incidencia.operario.username }}</strong>
                 </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Prioridad</span>
+                    <span class="badge bg-{% if incidencia.prioridad == 'CRITICA' %}danger{% elif incidencia.prioridad == 'ALTA' %}warning{% elif incidencia.prioridad == 'MEDIA' %}info{% else %}secondary{% endif %}">
+                        {{ incidencia.get_prioridad_display }}
+                    </span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Estado</span>
+                    <span class="badge bg-{% if incidencia.estado == 'RESUELTA' %}success{% elif incidencia.estado == 'PENDIENTE' %}warning{% elif incidencia.estado == 'REVISION' %}info{% else %}secondary{% endif %}">
+                        {{ incidencia.get_estado_display }}
+                    </span>
+                </li>
             </ul>
         </div>
 
@@ -162,17 +197,19 @@
                 <h5 class="mb-0"><i class="bi bi-cpu"></i> Equipo</h5>
             </div>
             <div class="card-body">
-                <p><strong>{{ incidencia.equipo.codigo_interno }}</strong><br>
-                <small class="text-muted">{{ incidencia.equipo.nombre }}</small></p>
+                <p class="mb-1">
+                    <strong>{{ incidencia.equipo.codigo_interno }}</strong><br>
+                    <small class="text-muted">{{ incidencia.equipo.nombre }}</small>
+                </p>
+                <hr class="my-2">
                 <p class="mb-1"><strong>Marca:</strong> {{ incidencia.equipo.marca|default:"-" }}</p>
                 <p class="mb-1"><strong>Modelo:</strong> {{ incidencia.equipo.modelo|default:"-" }}</p>
-                <p class="mb-0">
+                <p class="mb-3">
                     <strong>Estado:</strong>
                     <span class="badge bg-{% if incidencia.equipo.estado_operativo == 'ACTIVO' %}success{% elif incidencia.equipo.estado_operativo == 'MANTENIMIENTO' %}warning{% else %}danger{% endif %}">
                         {{ incidencia.equipo.get_estado_operativo_display }}
                     </span>
                 </p>
-                <hr>
                 <a href="{% url 'mantenimiento:detalle_equipo' incidencia.equipo.id %}" class="btn btn-sm btn-outline-primary w-100">
                     <i class="bi bi-eye"></i> Ver equipo completo
                 </a>

@@ -59,4 +59,7 @@ urlpatterns = [
     path('incidencias/gestion/<int:incidencia_id>/', views.detalle_incidencia, name='detalle_incidencia'),
     path('incidencias/gestion/<int:incidencia_id>/estado/<str:nuevo_estado>/', views.cambiar_estado_incidencia, name='cambiar_estado_incidencia'),
     path('incidencias/gestion/<int:incidencia_id>/crear-ot/', views.crear_ot_desde_incidencia, name='crear_ot_desde_incidencia'),
+    # Generación automática de OTs
+    path('generacion/preview/', views.preview_ots_automaticas, name='preview_ots_automaticas'),
+    path('generacion/ejecutar/', views.ejecutar_generacion_ots, name='ejecutar_generacion_ots'),
 ]

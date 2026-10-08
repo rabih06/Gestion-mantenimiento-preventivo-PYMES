@@ -5,6 +5,8 @@ from django.contrib import messages
 from django.db.models import Count, Q
 from django.core.paginator import Paginator
 from django.utils import timezone
+from django.db import transaction
+from .utils import notificar
 
 from .models import (
     Equipo, CategoriaEquipo, User, Alerta,
@@ -1649,3 +1651,154 @@ def crear_ot_desde_incidencia(request, incidencia_id):
         'fecha_sugerida': (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M'),
     }
     return render(request, 'mantenimiento/incidencias/crear_ot_desde_incidencia.html', context)
+
+# =====================================================
+# GENERACIÓN AUTOMÁTICA DE ÓRDENES DE TRABAJO
+# =====================================================
+
+def _calcular_planes_pendientes(dias_adelante=0):
+    """Helper: devuelve la lista de planes que se convertirían en OTs."""
+    from datetime import timedelta
+    hoy = timezone.now()
+    fecha_limite = hoy + timedelta(days=dias_adelante)
+
+    planes = PlanMantenimiento.objects.filter(
+        is_active=True,
+        proxima_ejecucion__lte=fecha_limite,
+        proxima_ejecucion__isnull=False,
+    ).select_related('equipo', 'tecnico_asignado').order_by('proxima_ejecucion')
+
+    # Filtrar los que ya tienen OT activa
+    resultado = []
+    for plan in planes:
+        tiene_ot_activa = OrdenTrabajo.objects.filter(
+            plan=plan,
+            estado__in=['PROGRAMADA', 'PROGRESO']
+        ).exists()
+        resultado.append({
+            'plan': plan,
+            'tiene_ot_activa': tiene_ot_activa,
+            'puede_generar': not tiene_ot_activa,
+        })
+    return resultado
+
+
+@login_required
+def preview_ots_automaticas(request):
+    """Muestra un preview de las OTs que se generarían."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden acceder.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    dias_adelante = int(request.GET.get('dias', 0))
+    planes = _calcular_planes_pendientes(dias_adelante)
+
+    total = len(planes)
+    pueden_generarse = sum(1 for p in planes if p['puede_generar'])
+    omitidos = sum(1 for p in planes if not p['puede_generar'])
+
+    context = {
+        'planes': planes,
+        'total': total,
+        'pueden_generarse': pueden_generarse,
+        'omitidos': omitidos,
+        'dias_adelante': dias_adelante,
+    }
+    return render(request, 'mantenimiento/generacion/preview_ots.html', context)
+
+
+@login_required
+def ejecutar_generacion_ots(request):
+    """Ejecuta la generación automática de OTs desde la UI."""
+    if request.user.rol_principal != 'ADMIN':
+        messages.error(request, 'Solo los administradores pueden ejecutar esto.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    dias_adelante = int(request.POST.get('dias_adelante', 0))
+
+    if request.method == 'POST':
+        from datetime import timedelta
+        hoy = timezone.now()
+        fecha_limite = hoy + timedelta(days=dias_adelante)
+
+        planes = PlanMantenimiento.objects.filter(
+            is_active=True,
+            proxima_ejecucion__lte=fecha_limite,
+            proxima_ejecucion__isnull=False,
+        ).select_related('equipo', 'tecnico_asignado')
+
+        creadas = 0
+        omitidas = 0
+        errores = 0
+
+        for plan in planes:
+            # Evitar duplicados
+            ot_existente = OrdenTrabajo.objects.filter(
+                plan=plan,
+                estado__in=['PROGRAMADA', 'PROGRESO']
+            ).exists()
+
+            if ot_existente:
+                omitidas += 1
+                continue
+
+            try:
+                with transaction.atomic():
+                    orden = OrdenTrabajo.objects.create(
+                        equipo=plan.equipo,
+                        tecnico=plan.tecnico_asignado,
+                        plan=plan,
+                        tipo='PREVENTIVO',
+                        prioridad='MEDIA',
+                        fecha_programada=hoy,
+                        descripcion_trabajo=f"[Plan Automático: {plan.nombre}]\n\n{plan.descripcion}",
+                        estado='PROGRAMADA',
+                        generada_por_sistema=True,
+                    )
+
+                    plan.ultima_ejecucion = hoy
+                    plan.save()
+
+                    # Notificar
+                    usuarios_notif = list(User.objects.filter(rol_principal='ADMIN', is_active=True))
+                    if plan.tecnico_asignado:
+                        usuarios_notif.append(plan.tecnico_asignado)
+
+                    notificar(
+                        tipo='OTRA',
+                        mensaje=f"🤖 OT-{orden.id} generada automáticamente: {plan.nombre} en {plan.equipo.codigo_interno}",
+                        equipo=plan.equipo,
+                        usuarios=usuarios_notif,
+                        evitar_duplicados_minutos=0,
+                    )
+                    creadas += 1
+            except Exception as e:
+                errores += 1
+
+        if creadas > 0:
+            messages.success(
+                request,
+                f'✅ Se generaron {creadas} Orden(es) de Trabajo automáticamente.'
+            )
+        if omitidas > 0:
+            messages.warning(
+                request,
+                f'⏭️ Se omitieron {omitidas} plan(es) porque ya tenían OT activa.'
+            )
+        if errores > 0:
+            messages.error(request, f'❌ Ocurrieron {errores} error(es).')
+
+        if creadas == 0 and omitidas == 0 and errores == 0:
+            messages.info(request, 'ℹ️ No había planes vencidos para procesar.')
+
+        return redirect('mantenimiento:lista_ordenes')
+
+    # GET: mostrar pantalla de confirmación
+    planes = _calcular_planes_pendientes(dias_adelante)
+    pueden_generarse = sum(1 for p in planes if p['puede_generar'])
+
+    context = {
+        'dias_adelante': dias_adelante,
+        'pueden_generarse': pueden_generarse,
+    }
+    return render(request, 'mantenimiento/generacion/ejecutar_generacion.html', context)    

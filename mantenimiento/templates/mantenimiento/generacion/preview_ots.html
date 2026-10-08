@@ -1,0 +1,172 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Preview de OTs Automáticas{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="bi bi-robot"></i> Preview de Generación Automática</h1>
+        <p class="text-muted mb-0">
+            Simulación de las OTs que se generarían con los planes actuales.
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mantenimiento:dashboard_admin' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        {% if pueden_generarse > 0 %}
+            <a href="{% url 'mantenimiento:ejecutar_generacion_ots' %}?dias={{ dias_adelante }}" 
+               class="btn btn-success">
+                <i class="bi bi-play-fill"></i> Ejecutar Generación
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Filtro de días -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-8">
+                <label class="form-label">¿Cuántos días hacia adelante quieres incluir?</label>
+                <select name="dias" class="form-select" onchange="this.form.submit()">
+                    <option value="0" {% if dias_adelante == 0 %}selected{% endif %}>
+                        Solo vencidos (hoy o antes)
+                    </option>
+                    <option value="1" {% if dias_adelante == 1 %}selected{% endif %}>
+                        Vencidos + próximos 1 día
+                    </option>
+                    <option value="3" {% if dias_adelante == 3 %}selected{% endif %}>
+                        Vencidos + próximos 3 días
+                    </option>
+                    <option value="7" {% if dias_adelante == 7 %}selected{% endif %}>
+                        Vencidos + próximos 7 días
+                    </option>
+                    <option value="15" {% if dias_adelante == 15 %}selected{% endif %}>
+                        Vencidos + próximos 15 días
+                    </option>
+                    <option value="30" {% if dias_adelante == 30 %}selected{% endif %}>
+                        Vencidos + próximos 30 días
+                    </option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> Actualizar Preview
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Resumen -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-start border-primary border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Total de Planes</h6>
+                <h3 class="mb-0">{{ total }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-start border-success border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Se Generarán</h6>
+                <h3 class="mb-0 text-success">{{ pueden_generarse }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-start border-warning border-4 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Omitidos (ya tienen OT)</h6>
+                <h3 class="mb-0 text-warning">{{ omitidos }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla de planes -->
+<div class="card shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-list-check"></i> Planes Detectados</h5>
+        <span class="badge bg-secondary">{{ total }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Plan</th>
+                    <th>Equipo</th>
+                    <th>Próxima Ejecución</th>
+                    <th>Estado</th>
+                    <th>Técnico a Asignar</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in planes %}
+                    <tr class="{% if not item.puede_generar %}table-secondary{% endif %}">
+                        <td>
+                            <strong>{{ item.plan.nombre }}</strong>
+                            <br>
+                            <small class="text-muted">
+                                Frecuencia: cada {{ item.plan.frecuencia_dias }} días
+                            </small>
+                        </td>
+                        <td>
+                            {{ item.plan.equipo.codigo_interno }}
+                            <br>
+                            <small class="text-muted">{{ item.plan.equipo.nombre }}</small>
+                        </td>
+                        <td>
+                            {{ item.plan.proxima_ejecucion|date:"d/m/Y H:i" }}
+                            {% if item.plan.estado_vencimiento == 'vencido' %}
+                                <span class="badge bg-danger ms-1">Vencido</span>
+                            {% elif item.plan.estado_vencimiento == 'proximo' %}
+                                <span class="badge bg-warning text-dark ms-1">Próximo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.puede_generar %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> Se generará
+                                </span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-pause-circle"></i> Omitido
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.plan.tecnico_asignado %}
+                                {{ item.plan.tecnico_asignado.get_full_name|default:item.plan.tecnico_asignado.username }}
+                            {% else %}
+                                <span class="text-muted">Sin asignar</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if not item.puede_generar %}
+                                <small class="text-muted">
+                                    Ya tiene una OT activa
+                                </small>
+                            {% else %}
+                                <i class="bi bi-arrow-right text-success"></i>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
+                            <p class="mt-2 mb-0">
+                                No hay planes vencidos con los filtros actuales.
+                            </p>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
