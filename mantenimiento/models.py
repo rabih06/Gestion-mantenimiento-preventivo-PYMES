@@ -9,7 +9,9 @@ from django.core.validators import MinValueValidator
 # =====================================================
 class User(AbstractUser):
     ROL_CHOICES = [
-        ('ADMIN', 'Administrador / Gerente'),
+        ('ADMIN', 'Administrador de Mantenimiento'),
+        ('OWNER', 'Dueño / Propietario (Owner)'),
+        ('ALMACEN', 'Administrador de Almacén'),
         ('TECNICO', 'Técnico de Mantenimiento'),
         ('OPERARIO', 'Operario / Trabajador'),
     ]
@@ -416,6 +418,12 @@ class OrdenTrabajo(models.Model):
 # DETALLE DE REPUESTOS USADOS EN UNA ORDEN
 # =====================================================
 class OrdenRepuesto(models.Model):
+    ESTADO_CHOICES = [
+        ('PENDIENTE', 'Pendiente de Salida'),
+        ('DESPACHADO', 'Despachado / Entregado'),
+        ('RECHAZADO', 'Rechazado'),
+    ]
+
     orden = models.ForeignKey(
         OrdenTrabajo,
         on_delete=models.CASCADE,
@@ -428,6 +436,28 @@ class OrdenRepuesto(models.Model):
     )
     cantidad_utilizada = models.IntegerField(validators=[MinValueValidator(1)])
     precio_unitario_momento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default='PENDIENTE',
+        help_text="Estado de entrega del repuesto por el almacén"
+    )
+    solicitado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='repuestos_solicitados'
+    )
+    despachado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='repuestos_despachados'
+    )
+    fecha_despacho = models.DateTimeField(null=True, blank=True)
+    motivo_rechazo = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -437,11 +467,78 @@ class OrdenRepuesto(models.Model):
         unique_together = (('orden', 'repuesto'),)
 
     def __str__(self):
-        return f"{self.orden} - {self.repuesto.nombre} x{self.cantidad_utilizada}"
+        return f"{self.orden} - {self.repuesto.nombre} x{self.cantidad_utilizada} ({self.get_estado_display()})"
 
     @property
     def subtotal(self):
         return self.cantidad_utilizada * self.precio_unitario_momento
+
+
+# =====================================================
+# PEDIDOS A PROVEEDORES (ÓRDENES DE COMPRA - OWNER)
+# =====================================================
+class PedidoProveedor(models.Model):
+    ESTADO_CHOICES = [
+        ('PENDIENTE', 'Pendiente de Envío'),
+        ('ENVIADO', 'Enviado al Proveedor'),
+        ('RECIBIDO', 'Recibido / Ingresado a Almacén'),
+        ('CANCELADO', 'Cancelado'),
+    ]
+
+    proveedor = models.ForeignKey(
+        Proveedor,
+        on_delete=models.CASCADE,
+        related_name='pedidos'
+    )
+    repuesto = models.ForeignKey(
+        Repuesto,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pedidos_proveedor',
+        help_text="Repuesto del inventario a reabastecer (opcional si es compra de insumo nuevo)"
+    )
+    descripcion_item = models.CharField(
+        max_length=200,
+        help_text="Descripción del repuesto, material o insumo pedido"
+    )
+    cantidad = models.IntegerField(validators=[MinValueValidator(1)])
+    precio_unitario_estimado = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Costo unitario acordado con el proveedor"
+    )
+    costo_total = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default='PENDIENTE'
+    )
+    fecha_pedido = models.DateTimeField(auto_now_add=True)
+    fecha_recepcion = models.DateTimeField(null=True, blank=True)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='pedidos_proveedor_creados'
+    )
+    observaciones = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'pedidos_proveedor'
+        verbose_name = 'Pedido a Proveedor'
+        verbose_name_plural = 'Pedidos a Proveedores'
+        ordering = ['-fecha_pedido']
+
+    def save(self, *args, **kwargs):
+        self.costo_total = self.cantidad * self.precio_unitario_estimado
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Pedido #{self.id} - {self.proveedor.nombre} ({self.get_estado_display()})"
 
 
 # =====================================================
@@ -493,8 +590,8 @@ class AlertaQuerySet(models.QuerySet):
         if not user.is_authenticated:
             return self.none()
         
-        if user.rol_principal in ['ADMIN', 'TECNICO']:
-            # Admin y Técnico ven:
+        if user.rol_principal in ['ADMIN', 'OWNER', 'ALMACEN', 'TECNICO']:
+            # Admin, Owner, Almacén y Técnico ven:
             # - Las específicamente dirigidas a ellos
             # - Las que no tienen destinatarios (alertas globales del sistema)
             return self.filter(
@@ -519,7 +616,6 @@ class Alerta(models.Model):
         ('MANTENIMIENTO_PROXIMO', 'Mantenimiento próximo'),
         ('MANTENIMIENTO_VENCIDO', 'Mantenimiento vencido'),
         ('EQUIPO_CRITICO', 'Equipo en estado crítico'),
-        # ✅ NUEVOS TIPOS
         ('EQUIPO_BAJA', 'Equipo dado de baja'),
         ('EQUIPO_FUERA_SERVICIO', 'Equipo fuera de servicio'),
         ('EQUIPO_EN_MANTENIMIENTO', 'Equipo en mantenimiento'),
@@ -527,6 +623,11 @@ class Alerta(models.Model):
         ('OT_COMPLETADA', 'Orden de trabajo completada'),
         ('NUEVA_INCIDENCIA', 'Nueva incidencia reportada'),
         ('INCIDENCIA_RESUELTA', 'Incidencia resuelta'),
+        ('SOLICITUD_REPUESTO', 'Solicitud de repuesto para OT'),
+        ('DESPACHO_REPUESTO', 'Repuesto despachado por almacén'),
+        ('RECHAZO_REPUESTO', 'Solicitud de repuesto rechazada'),
+        ('PEDIDO_PROVEEDOR_CREADO', 'Nuevo pedido a proveedor'),
+        ('PEDIDO_PROVEEDOR_RECIBIDO', 'Pedido a proveedor recibido'),
         ('OTRA', 'Otra'),
     ]
     tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
@@ -552,8 +653,7 @@ class Alerta(models.Model):
         help_text='Usuarios que ya marcaron esta alerta como leída'
     )
     
-    # ✅ NUEVO: Usuarios destinatarios específicos
-    # Si está vacío → la ven ADMIN y TECNICO por defecto
+    # ✅ Destinatarios específicos
     destinatarios = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
@@ -583,9 +683,9 @@ class Alerta(models.Model):
         """Devuelve True si el usuario puede ver esta alerta."""
         if not user.is_authenticated:
             return False
-        # Si no tiene destinatarios → es global → visible para admin y técnicos
+        # Si no tiene destinatarios → es global → visible para admin, owner, almacén y técnicos
         if not self.destinatarios.exists():
-            return user.rol_principal in ['ADMIN', 'TECNICO']
+            return user.rol_principal in ['ADMIN', 'OWNER', 'ALMACEN', 'TECNICO']
         # Si tiene destinatarios → solo ellos la ven
         return self.destinatarios.filter(pk=user.pk).exists()
 

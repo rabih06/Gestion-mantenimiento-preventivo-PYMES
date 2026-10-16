@@ -1,0 +1,361 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Panel de Almacén{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1><i class="bi bi-boxes"></i> Panel del Administrador de Almacén</h1>
+        <p class="text-muted mb-0">Control de salidas para órdenes de trabajo, ingresos y niveles de inventario</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mantenimiento:solicitudes_repuestos_almacen' %}" class="btn btn-outline-primary">
+            <i class="bi bi-list-check"></i> Todas las Solicitudes
+        </a>
+        <a href="{% url 'mantenimiento:lista_repuestos' %}" class="btn btn-primary">
+            <i class="bi bi-box-seam"></i> Catálogo de Repuestos
+        </a>
+    </div>
+</div>
+
+<div class="alert alert-info d-flex align-items-center justify-content-between">
+    <div>
+        <i class="bi bi-shield-check me-2"></i>
+        Bienvenido, <strong>{{ user.get_full_name|default:user.username }}</strong> (Administrador de Almacén).
+        Tienes la responsabilidad exclusiva de dar salida a los repuestos solicitados por los técnicos.
+    </div>
+    {% if total_solicitudes_pendientes > 0 %}
+        <span class="badge bg-danger fs-6">{{ total_solicitudes_pendientes }} pendiente(s)</span>
+    {% endif %}
+</div>
+
+<!-- ============================================== -->
+<!-- KPIs DEL ALMACÉN                                -->
+<!-- ============================================== -->
+<div class="row mb-4 g-3">
+    <!-- Solicitudes Pendientes -->
+    <div class="col-md-3">
+        <a href="{% url 'mantenimiento:solicitudes_repuestos_almacen' %}?estado=PENDIENTE" class="text-decoration-none">
+            <div class="card border-start border-warning border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Solicitudes por Despachar</h6>
+                            <h2 class="mb-0 text-dark">{{ total_solicitudes_pendientes }}</h2>
+                            <small class="text-warning">Ver solicitudes <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-clipboard-pulse text-warning" style="font-size: 2.3rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Total de Repuestos -->
+    <div class="col-md-3">
+        <a href="{% url 'mantenimiento:lista_repuestos' %}" class="text-decoration-none">
+            <div class="card border-start border-primary border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Ítems en Inventario</h6>
+                            <h2 class="mb-0 text-dark">{{ total_repuestos }}</h2>
+                            <small class="text-primary">Ver catálogo <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-box-seam text-primary" style="font-size: 2.3rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Stock Bajo -->
+    <div class="col-md-3">
+        <a href="{% url 'mantenimiento:lista_repuestos' %}?stock=bajo" class="text-decoration-none">
+            <div class="card border-start border-danger border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Stock Bajo / Crítico</h6>
+                            <h2 class="mb-0 {% if total_repuestos_bajos > 0 %}text-danger{% else %}text-dark{% endif %}">
+                                {{ total_repuestos_bajos }}
+                            </h2>
+                            <small class="text-danger">Reponer urgente <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-exclamation-triangle text-danger" style="font-size: 2.3rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Valorización del Almacén -->
+    <div class="col-md-3">
+        <div class="card border-start border-success border-4 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted text-uppercase mb-1">Valor de Inventario</h6>
+                        <h2 class="mb-0 text-success">${{ valor_inventario|floatformat:2 }}</h2>
+                        <small class="text-muted">Costo total acumulado</small>
+                    </div>
+                    <i class="bi bi-cash-coin text-success" style="font-size: 2.3rem;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- BANDEJA DE SALIDAS PENDIENTES                  -->
+<!-- ============================================== -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h5 class="mb-0">
+            <i class="bi bi-box-arrow-up-right text-warning me-2"></i>
+            Repuestos Solicitados por Técnicos (Pendientes de Salida)
+        </h5>
+        <span class="badge bg-warning text-dark">{{ total_solicitudes_pendientes }} pendientes</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>OT / Equipo</th>
+                    <th>Prioridad</th>
+                    <th>Repuesto Requerido</th>
+                    <th>Solicitado</th>
+                    <th>Stock en Almacén</th>
+                    <th>Técnico Solicitante</th>
+                    <th>Fecha</th>
+                    <th class="text-end">Dar Salida</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sol in solicitudes_pendientes %}
+                    <tr>
+                        <td>
+                            <strong>
+                                <a href="{% url 'mantenimiento:detalle_orden' sol.orden.id %}">
+                                    OT #{{ sol.orden.id }}
+                                </a>
+                            </strong>
+                            <br>
+                            <small class="text-muted">{{ sol.orden.equipo.codigo_interno }} - {{ sol.orden.equipo.nombre|truncatechars:20 }}</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if sol.orden.prioridad == 'CRITICA' %}danger{% elif sol.orden.prioridad == 'ALTA' %}warning{% else %}info{% endif %}">
+                                {{ sol.orden.get_prioridad_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <strong>{{ sol.repuesto.nombre }}</strong>
+                            <br>
+                            <code class="small">{{ sol.repuesto.codigo_sku }}</code>
+                            {% if sol.repuesto.ubicacion_almacen %}
+                                <span class="badge bg-light text-dark border ms-1"><i class="bi bi-geo-alt"></i> {{ sol.repuesto.ubicacion_almacen }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-primary fs-6">{{ sol.cantidad_utilizada }} {{ sol.repuesto.unidad_medida }}</span>
+                        </td>
+                        <td>
+                            {% if sol.repuesto.cantidad_actual >= sol.cantidad_utilizada %}
+                                <span class="text-success fw-bold">
+                                    <i class="bi bi-check-circle"></i> {{ sol.repuesto.cantidad_actual }} disponibles
+                                </span>
+                            {% else %}
+                                <span class="text-danger fw-bold">
+                                    <i class="bi bi-x-circle"></i> Solo {{ sol.repuesto.cantidad_actual }} disponibles
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if sol.solicitado_por %}
+                                {{ sol.solicitado_por.get_full_name|default:sol.solicitado_por.username }}
+                            {% elif sol.orden.tecnico %}
+                                {{ sol.orden.tecnico.get_full_name|default:sol.orden.tecnico.username }}
+                            {% else %}
+                                <span class="text-muted">Técnico</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="text-muted">{{ sol.created_at|date:"d/m H:i" }}</small>
+                        </td>
+                        <td class="text-end">
+                            <div class="d-inline-flex gap-1">
+                                <!-- Dar Salida Directa -->
+                                {% if sol.repuesto.cantidad_actual >= sol.cantidad_utilizada %}
+                                    <form method="post" action="{% url 'mantenimiento:dar_salida_repuesto' sol.id %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-success" title="Autorizar salida y descontar inventario">
+                                            <i class="bi bi-box-arrow-up-right"></i> Dar Salida
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <button class="btn btn-sm btn-secondary disabled" title="Stock insuficiente">
+                                        Sin Stock
+                                    </button>
+                                {% endif %}
+
+                                <!-- Rechazar Solicitud -->
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalRechazar{{ sol.id }}" title="Rechazar solicitud">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+
+                            <!-- Modal Rechazo -->
+                            <div class="modal fade text-start" id="modalRechazar{{ sol.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form method="post" action="{% url 'mantenimiento:rechazar_repuesto' sol.id %}">
+                                            {% csrf_token %}
+                                            <div class="modal-header bg-danger text-white">
+                                                <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Rechazar Solicitud #{{ sol.id }}</h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p>Estás a punto de rechazar la salida de <strong>{{ sol.cantidad_utilizada }}x {{ sol.repuesto.nombre }}</strong> para la OT #{{ sol.orden.id }}.</p>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Motivo del rechazo *</label>
+                                                    <textarea name="motivo_rechazo" class="form-control" rows="3" required placeholder="Ej: Stock agotado físicamente, repuesto reservado para emergencia..."></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <button type="submit" class="btn btn-danger">Confirmar Rechazo</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-5">
+                            <i class="bi bi-check2-circle text-success" style="font-size: 2.5rem;"></i>
+                            <p class="mt-2 mb-0">¡Todo al día! No hay solicitudes de repuestos pendientes de salida.</p>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if total_solicitudes_pendientes > 8 %}
+        <div class="card-footer bg-white text-center">
+            <a href="{% url 'mantenimiento:solicitudes_repuestos_almacen' %}?estado=PENDIENTE" class="text-decoration-none">
+                Ver todas las solicitudes pendientes ({{ total_solicitudes_pendientes }}) <i class="bi bi-arrow-right"></i>
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- ============================================== -->
+<!-- FILA INFERIOR: STOCK BAJO Y MOVIMIENTOS        -->
+<!-- ============================================== -->
+<div class="row g-4">
+    <!-- Repuestos con Stock Bajo -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle text-danger me-2"></i> Repuestos con Stock Crítico</h5>
+                <a href="{% url 'mantenimiento:lista_repuestos' %}?stock=bajo" class="btn btn-sm btn-outline-danger">
+                    Ver todos
+                </a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Repuesto</th>
+                            <th>Stock / Mínimo</th>
+                            <th class="text-end">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rep in repuestos_bajos %}
+                            <tr>
+                                <td>
+                                    <strong>{{ rep.nombre }}</strong><br>
+                                    <code class="small">{{ rep.codigo_sku }}</code>
+                                </td>
+                                <td>
+                                    <span class="badge bg-danger">{{ rep.cantidad_actual }} {{ rep.unidad_medida }}</span>
+                                    <small class="text-muted ms-1">(Mín: {{ rep.stock_minimo }})</small>
+                                </td>
+                                <td class="text-end">
+                                    <a href="{% url 'mantenimiento:ingreso_repuesto' rep.id %}" class="btn btn-sm btn-success" title="Ingresar stock">
+                                        <i class="bi bi-plus-lg"></i> Ingresar
+                                    </a>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-4">
+                                    <i class="bi bi-check-circle text-success"></i> Todos los repuestos tienen niveles óptimos.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Últimos Movimientos -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history text-info me-2"></i> Auditoría de Movimientos</h5>
+                <span class="badge bg-secondary">Recientes</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Repuesto</th>
+                            <th>Cantidad</th>
+                            <th>Usuario</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mov in ultimos_movimientos %}
+                            <tr>
+                                <td>
+                                    {% if mov.tipo == 'ENTRADA' %}
+                                        <span class="badge bg-success"><i class="bi bi-arrow-down-left"></i> Entrada</span>
+                                    {% elif mov.tipo == 'SALIDA' %}
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-arrow-up-right"></i> Salida</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Ajuste</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="fw-bold">{{ mov.repuesto.nombre|truncatechars:22 }}</small>
+                                </td>
+                                <td>
+                                    <strong>{{ mov.cantidad }}</strong>
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ mov.usuario.username|default:"-" }}</small>
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ mov.created_at|date:"d/m H:i" }}</small>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    No hay movimientos registrados recientemente.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -73,12 +73,13 @@
                 <span class="badge bg-secondary">{{ repuestos_usados|length }}</span>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 align-middle">
                     <thead class="table-light">
                         <tr>
                             <th>Repuesto</th>
                             <th>SKU</th>
                             <th>Cantidad</th>
+                            <th>Estado Almacén</th>
                             <th>Precio unit.</th>
                             <th>Subtotal</th>
                         </tr>
@@ -88,16 +89,45 @@
                             <tr>
                                 <td>{{ or.repuesto.nombre }}</td>
                                 <td><code>{{ or.repuesto.codigo_sku }}</code></td>
-                                <td><strong>{{ or.cantidad_utilizada }}</strong></td>
+                                <td><strong>{{ or.cantidad_utilizada }}</strong> {{ or.repuesto.unidad_medida }}</td>
                                 <td>
-                                    {% if user.rol_principal == 'ADMIN' %}
+                                    {% if or.estado == 'DESPACHADO' %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i> Despachado
+                                            {% if or.despachado_por %}
+                                                <small>({{ or.despachado_por.username }})</small>
+                                            {% endif %}
+                                        </span>
+                                    {% elif or.estado == 'RECHAZADO' %}
+                                        <span class="badge bg-danger" title="{{ or.motivo_rechazo }}">
+                                            <i class="bi bi-x-circle"></i> Rechazado
+                                        </span>
+                                        {% if or.motivo_rechazo %}
+                                            <div class="small text-danger mt-1">{{ or.motivo_rechazo }}</div>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-clock"></i> Pendiente de Salida
+                                        </span>
+                                        {% if user.rol_principal in 'ADMIN ALMACEN' %}
+                                            <form method="post" action="{% url 'mantenimiento:dar_salida_repuesto' or.id %}" class="d-inline ms-1">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-sm btn-outline-success py-0 px-1" title="Dar salida ahora">
+                                                    <i class="bi bi-box-arrow-up-right"></i> Despachar
+                                                </button>
+                                            </form>
+                                        {% endif %}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user.rol_principal in 'ADMIN OWNER ALMACEN' %}
                                         ${{ or.precio_unitario_momento }}
                                     {% else %}
                                         -
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if user.rol_principal == 'ADMIN' %}
+                                    {% if user.rol_principal in 'ADMIN OWNER ALMACEN' %}
                                         ${{ or.subtotal|floatformat:2 }}
                                     {% else %}
                                         -
@@ -106,7 +136,7 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="5" class="text-center text-muted py-4">
+                                <td colspan="6" class="text-center text-muted py-4">
                                     No hay repuestos registrados en esta orden.
                                 </td>
                             </tr>
@@ -115,10 +145,13 @@
                 </table>
             </div>
 
-            <!-- Formset para añadir repuestos (si la OT está activa) -->
+            <!-- Formset para solicitar repuestos (si la OT está activa) -->
             {% if puede_editar_repuestos and user.rol_principal in 'ADMIN TECNICO' %}
                 <div class="card-footer bg-white">
-                    <h6 class="mb-3"><i class="bi bi-plus-circle"></i> Añadir / Editar Repuestos</h6>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0"><i class="bi bi-plus-circle"></i> Solicitar Repuestos para esta Orden</h6>
+                        <small class="text-muted"><i class="bi bi-info-circle"></i> El Administrador de Almacén recibirá la notificación para autorizar la salida</small>
+                    </div>
                     <form method="post">
                         {% csrf_token %}
                         {{ formset.management_form }}
@@ -150,7 +183,7 @@
                         {% endfor %}
 
                         <button type="submit" class="btn btn-sm btn-primary mt-2">
-                            <i class="bi bi-save"></i> Guardar Repuestos
+                            <i class="bi bi-send-check"></i> Enviar Solicitud a Almacén
                         </button>
                     </form>
                 </div>

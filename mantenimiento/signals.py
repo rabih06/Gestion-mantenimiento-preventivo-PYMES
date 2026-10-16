@@ -163,17 +163,36 @@ def notificar_cambio_estado_ot(sender, instance, created, **kwargs):
 
 
 # =====================================================
-# ÓRDENES DE REPUESTOS - LÓGICA DE PRECIOS Y COSTOS
+# ÓRDENES DE REPUESTOS - LÓGICA DE PRECIOS Y NOTIFICACIONES
 # =====================================================
 
 @receiver(post_save, sender=OrdenRepuesto)
-def descontar_stock(sender, instance, created, **kwargs):
-    """Descuenta el stock del repuesto al usarlo en una orden."""
-    if created:
-        repuesto = instance.repuesto
-        repuesto.cantidad_actual -= instance.cantidad_utilizada
-        repuesto.fecha_ultima_salida = instance.created_at
-        repuesto.save()
+def notificar_solicitud_repuesto(sender, instance, created, **kwargs):
+    """Notifica al administrador del almacén y mantenimiento cuando se pide un repuesto."""
+    if created and instance.estado == 'PENDIENTE':
+        solicitante = (
+            instance.solicitado_por.get_full_name() or instance.solicitado_por.username
+            if instance.solicitado_por
+            else (
+                instance.orden.tecnico.get_full_name() or instance.orden.tecnico.username
+                if instance.orden.tecnico
+                else "Técnico"
+            )
+        )
+        mensaje = (
+            f"📦 Solicitud de repuesto: {solicitante} ordenó "
+            f"{instance.cantidad_utilizada} {instance.repuesto.unidad_medida}(s) de \"{instance.repuesto.nombre}\" "
+            f"para OT #{instance.orden.id} ({instance.orden.equipo.codigo_interno}). Requiere salida de almacén."
+        )
+        notificar(
+            tipo='SOLICITUD_REPUESTO',
+            mensaje=mensaje,
+            repuesto=instance.repuesto,
+            equipo=instance.orden.equipo,
+            notificar_admins=True,
+            notificar_almacen=True,
+            evitar_duplicados_minutos=0,
+        )
 
 
 @receiver(post_save, sender=OrdenRepuesto)
@@ -205,18 +224,17 @@ def asignar_grupo_por_rol(sender, instance, **kwargs):
     """Asigna al usuario al grupo correspondiente según su rol_principal."""
     mapa_roles = {
         'ADMIN': 'Administradores',
+        'OWNER': 'Dueños',
+        'ALMACEN': 'Almacenistas',
         'TECNICO': 'Técnicos',
         'OPERARIO': 'Operarios',
     }
     nombre_grupo = mapa_roles.get(instance.rol_principal)
     if not nombre_grupo:
         return
-    try:
-        grupo = Group.objects.get(name=nombre_grupo)
-    except Group.DoesNotExist:
-        return
+    grupo, _ = Group.objects.get_or_create(name=nombre_grupo)
     grupos_rol = Group.objects.filter(
-        name__in=['Administradores', 'Técnicos', 'Operarios']
+        name__in=['Administradores', 'Dueños', 'Almacenistas', 'Técnicos', 'Operarios']
     )
     instance.groups.remove(*grupos_rol)
     instance.groups.add(grupo)

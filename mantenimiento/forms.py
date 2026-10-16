@@ -2,7 +2,8 @@ from django import forms
 from django.forms import inlineformset_factory, TextInput
 from .models import (
     Incidencia, Equipo, User, AtributoEquipo,
-    Repuesto, Proveedor, PlanMantenimiento,OrdenTrabajo, OrdenRepuesto
+    Repuesto, Proveedor, PlanMantenimiento, OrdenTrabajo, OrdenRepuesto,
+    PedidoProveedor
 )
 
 
@@ -507,3 +508,127 @@ OrdenRepuestoFormSet = inlineformset_factory(
     extra=1,
     can_delete=True,
 )
+
+
+# =====================================================
+# FORMULARIO DE INGRESO DE STOCK (ALMACÉN)
+# =====================================================
+class EntradaRepuestoForm(forms.Form):
+    """Formulario para que el Administrador de Almacén ingrese stock."""
+
+    cantidad = forms.IntegerField(
+        min_value=1,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': 1,
+            'placeholder': 'Ej: 10',
+        }),
+        label='Cantidad a ingresar *',
+        help_text='Unidades físicas que se incorporan al stock del almacén.'
+    )
+    nuevo_precio_unitario = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=10,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'step': '0.01',
+            'placeholder': 'Dejar vacío si no cambia',
+        }),
+        label='Actualizar precio unitario ($)',
+        help_text='Opcional. Si el costo del repuesto cambió con este ingreso.'
+    )
+    motivo = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Ej: Compra directa, Factura #458, Devolución de taller',
+        }),
+        label='Motivo / Referencia del ingreso',
+    )
+
+
+# =====================================================
+# FORMULARIO PARA RECHAZAR SOLICITUD DE REPUESTO
+# =====================================================
+class RechazarRepuestoForm(forms.Form):
+    """Formulario para que el almacenero documente el rechazo de un repuesto."""
+
+    motivo_rechazo = forms.CharField(
+        required=True,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': 'Indica el motivo (ej: Stock físico agotado, pieza en mal estado, no corresponde al equipo)...',
+        }),
+        label='Motivo del rechazo *',
+    )
+
+
+# =====================================================
+# FORMULARIO DE PEDIDOS A PROVEEDORES (OWNER)
+# =====================================================
+class PedidoProveedorForm(forms.ModelForm):
+    """Formulario para que el Owner gestione órdenes de compra a proveedores."""
+
+    class Meta:
+        model = PedidoProveedor
+        fields = [
+            'proveedor', 'repuesto', 'descripcion_item',
+            'cantidad', 'precio_unitario_estimado', 'observaciones'
+        ]
+        widgets = {
+            'proveedor': forms.Select(attrs={'class': 'form-select'}),
+            'repuesto': forms.Select(attrs={'class': 'form-select'}),
+            'descripcion_item': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ej: Rodamientos de precisión 6204-2RS, Filtros hidráulicos...'
+            }),
+            'cantidad': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 1,
+                'placeholder': '1'
+            }),
+            'precio_unitario_estimado': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 0,
+                'step': '0.01',
+                'placeholder': '0.00'
+            }),
+            'observaciones': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Detalles adicionales, plazos de entrega, condiciones de pago...'
+            }),
+        }
+        labels = {
+            'proveedor': 'Proveedor *',
+            'repuesto': 'Repuesto del inventario (opcional)',
+            'descripcion_item': 'Descripción del ítem o repuesto *',
+            'cantidad': 'Cantidad *',
+            'precio_unitario_estimado': 'Precio unitario estimado ($) *',
+            'observaciones': 'Observaciones / Términos',
+        }
+        help_texts = {
+            'proveedor': 'Empresa proveedora a la que se le emitirá el pedido.',
+            'repuesto': 'Selecciona el repuesto si este pedido busca reabastecer el inventario existente.',
+            'descripcion_item': 'Nombre o especificación técnica de la pieza o insumo.',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['proveedor'].queryset = Proveedor.objects.filter(is_active=True).order_by('nombre')
+        self.fields['repuesto'].queryset = Repuesto.objects.all().order_by('nombre')
+        self.fields['repuesto'].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        repuesto = cleaned.get('repuesto')
+        descripcion = cleaned.get('descripcion_item')
+
+        # Si seleccionó repuesto pero no puso descripción, auto-completar
+        if repuesto and not descripcion:
+            cleaned['descripcion_item'] = f"{repuesto.codigo_sku} - {repuesto.nombre}"
+
+        return cleaned

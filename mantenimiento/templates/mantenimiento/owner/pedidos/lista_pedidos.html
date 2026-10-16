@@ -1,0 +1,153 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Pedidos a Proveedores{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1><i class="bi bi-cart-check"></i> Órdenes de Compra y Pedidos a Proveedores</h1>
+        <p class="text-muted mb-0">Gestión de reabastecimiento y compras realizada por el Dueño (Owner)</p>
+    </div>
+    {% if user.rol_principal in 'OWNER ADMIN' %}
+        <a href="{% url 'mantenimiento:crear_pedido_proveedor' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Nuevo Pedido a Proveedor
+        </a>
+    {% endif %}
+</div>
+
+<!-- Filtros -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Buscar</label>
+                <input type="text" name="q" class="form-control"
+                       placeholder="Ítem, proveedor, términos..." value="{{ q }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Proveedor</label>
+                <select name="proveedor" class="form-select">
+                    <option value="">Todos los proveedores</option>
+                    {% for prov in proveedores %}
+                        <option value="{{ prov.id }}" {% if proveedor_filtro == prov.id|stringformat:"s" %}selected{% endif %}>
+                            {{ prov.nombre }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Estado</label>
+                <select name="estado" class="form-select">
+                    <option value="">Todos los estados</option>
+                    <option value="PENDIENTE" {% if estado_filtro == 'PENDIENTE' %}selected{% endif %}>Pendiente de Envío</option>
+                    <option value="ENVIADO" {% if estado_filtro == 'ENVIADO' %}selected{% endif %}>Enviado al Proveedor</option>
+                    <option value="RECIBIDO" {% if estado_filtro == 'RECIBIDO' %}selected{% endif %}>Recibido en Almacén</option>
+                    <option value="CANCELADO" {% if estado_filtro == 'CANCELADO' %}selected{% endif %}>Cancelado</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-fill">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+                <a href="{% url 'mantenimiento:lista_pedidos_proveedor' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabla de Pedidos -->
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th># Pedido</th>
+                    <th>Proveedor</th>
+                    <th>Ítem / Repuesto</th>
+                    <th>Cantidad</th>
+                    <th>Precio Unit.</th>
+                    <th>Costo Total</th>
+                    <th>Estado</th>
+                    <th>Fecha</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pedido in page_obj %}
+                    <tr>
+                        <td><strong>#{{ pedido.id }}</strong></td>
+                        <td>
+                            <strong>{{ pedido.proveedor.nombre }}</strong>
+                            <br>
+                            <small class="text-muted">{{ pedido.proveedor.contacto|default:"" }}</small>
+                        </td>
+                        <td>
+                            {{ pedido.descripcion_item }}
+                            {% if pedido.repuesto %}
+                                <br><small class="text-muted">Enlaza a SKU: <code>{{ pedido.repuesto.codigo_sku }}</code></small>
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ pedido.cantidad }}</strong></td>
+                        <td>${{ pedido.precio_unitario_estimado }}</td>
+                        <td><strong class="text-success">${{ pedido.costo_total|floatformat:2 }}</strong></td>
+                        <td>
+                            <span class="badge bg-{% if pedido.estado == 'RECIBIDO' %}success{% elif pedido.estado == 'ENVIADO' %}primary{% elif pedido.estado == 'CANCELADO' %}danger{% else %}warning text-dark{% endif %}">
+                                {{ pedido.get_estado_display }}
+                            </span>
+                        </td>
+                        <td><small class="text-muted">{{ pedido.fecha_pedido|date:"d/m/Y H:i" }}</small></td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'mantenimiento:detalle_pedido_proveedor' pedido.id %}" class="btn btn-outline-primary" title="Ver detalle">
+                                    <i class="bi bi-eye"></i> Detalle
+                                </a>
+                                {% if pedido.estado == 'PENDIENTE' and user.rol_principal in 'OWNER ADMIN' %}
+                                    <a href="{% url 'mantenimiento:cambiar_estado_pedido_proveedor' pedido.id 'ENVIADO' %}" class="btn btn-outline-primary" title="Marcar como Enviado">
+                                        <i class="bi bi-send"></i>
+                                    </a>
+                                {% endif %}
+                                {% if pedido.estado == 'ENVIADO' and user.rol_principal in 'OWNER ADMIN ALMACEN' %}
+                                    <a href="{% url 'mantenimiento:cambiar_estado_pedido_proveedor' pedido.id 'RECIBIDO' %}" class="btn btn-outline-success" title="Registrar Recepción de Mercancía">
+                                        <i class="bi bi-check2-circle"></i> Recibir
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-5">
+                            <i class="bi bi-inbox" style="font-size: 2.5rem;"></i>
+                            <p class="mt-2 mb-0">No se encontraron pedidos de compra.</p>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación -->
+    {% if page_obj.has_other_pages %}
+        <div class="card-footer bg-white">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&proveedor={{ proveedor_filtro }}&estado={{ estado_filtro }}&q={{ q }}">Anterior</a>
+                        </li>
+                    {% endif %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&proveedor={{ proveedor_filtro }}&estado={{ estado_filtro }}&q={{ q }}">Siguiente</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

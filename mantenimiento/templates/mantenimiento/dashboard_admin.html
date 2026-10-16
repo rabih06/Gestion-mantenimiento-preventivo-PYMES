@@ -72,7 +72,7 @@
 <!-- ============================================== -->
 <div class="row mb-4 g-3">
     <!-- Incidencias Pendientes -->
-    <div class="col-md-6">
+    <div class="col-md-4">
         <a href="{% url 'mantenimiento:lista_incidencias_admin' %}?estado=PENDIENTE" class="text-decoration-none">
             <div class="card border-start border-info border-4 shadow-sm h-100 card-hover">
                 <div class="card-body">
@@ -89,8 +89,28 @@
         </a>
     </div>
 
+    <!-- Solicitudes de Repuestos en Almacén -->
+    <div class="col-md-4">
+        <a href="{% url 'mantenimiento:solicitudes_repuestos_almacen' %}?estado=PENDIENTE" class="text-decoration-none">
+            <div class="card border-start border-warning border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Repuestos Pedidos a Almacén</h6>
+                            <h2 class="mb-0 {% if solicitudes_repuestos_pendientes > 0 %}text-warning{% else %}text-dark{% endif %}">
+                                {{ solicitudes_repuestos_pendientes }}
+                            </h2>
+                            <small class="text-warning">Ver solicitudes <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-clipboard-pulse text-warning" style="font-size: 2.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
     <!-- Repuestos con Stock Bajo -->
-    <div class="col-md-6">
+    <div class="col-md-4">
         <a href="{% url 'mantenimiento:lista_repuestos' %}?stock=bajo" class="text-decoration-none">
             <div class="card border-start border-secondary border-4 shadow-sm h-100 card-hover">
                 <div class="card-body">

@@ -24,23 +24,43 @@
             <i class="bi bi-arrow-left"></i> Volver
         </a>
 
-        <!-- Botón Retirar: Admin y Técnico, solo si hay stock -->
-        {% if user.rol_principal == 'ADMIN' or user.rol_principal == 'TECNICO' %}
+        <!-- Ingresar Stock: Almacén y Admin -->
+        {% if user.rol_principal in 'ALMACEN ADMIN' %}
+            <a href="{% url 'mantenimiento:ingreso_repuesto' repuesto.id %}" class="btn btn-success">
+                <i class="bi bi-plus-lg"></i> Ingresar Stock
+            </a>
+        {% endif %}
+
+        <!-- Salida / Ajuste de almacén: SOLO Almacén y Admin -->
+        {% if user.rol_principal in 'ALMACEN ADMIN' %}
             {% if repuesto.cantidad_actual > 0 %}
                 <a href="{% url 'mantenimiento:retirar_repuesto' repuesto.id %}" class="btn btn-warning">
-                    <i class="bi bi-box-arrow-up"></i> Retirar
+                    <i class="bi bi-box-arrow-up"></i> Salida / Ajuste
                 </a>
             {% endif %}
+        {% endif %}
+
+        <!-- Pedido a Proveedor: Owner -->
+        {% if user.rol_principal == 'OWNER' %}
+            <a href="{% url 'mantenimiento:crear_pedido_proveedor' %}?repuesto={{ repuesto.id }}" class="btn btn-primary">
+                <i class="bi bi-cart-plus"></i> Pedir a Proveedor
+            </a>
+        {% endif %}
+
+        <!-- Movimientos: Admin, Almacén, Técnico -->
+        {% if user.rol_principal in 'ADMIN ALMACEN OWNER TECNICO' %}
             <a href="{% url 'mantenimiento:historial_movimientos' repuesto.id %}" class="btn btn-outline-info">
                 <i class="bi bi-clock-history"></i> Movimientos
             </a>
         {% endif %}
 
-        <!-- Editar y Eliminar: SOLO Admin -->
-        {% if user.rol_principal == 'ADMIN' %}
-            <a href="{% url 'mantenimiento:editar_repuesto' repuesto.id %}" class="btn btn-primary">
+        <!-- Editar y Eliminar: Admin y Almacén (editar) -->
+        {% if user.rol_principal in 'ADMIN ALMACEN' %}
+            <a href="{% url 'mantenimiento:editar_repuesto' repuesto.id %}" class="btn btn-outline-secondary">
                 <i class="bi bi-pencil"></i> Editar
             </a>
+        {% endif %}
+        {% if user.rol_principal == 'ADMIN' %}
             <a href="{% url 'mantenimiento:eliminar_repuesto' repuesto.id %}" class="btn btn-danger">
                 <i class="bi bi-trash"></i> Eliminar
             </a>
@@ -95,8 +115,8 @@
                     <strong>{{ total_usado }} {{ repuesto.unidad_medida }}</strong>
                 </li>
 
-                <!-- Proveedor y Precio: SOLO Admin -->
-                {% if user.rol_principal == 'ADMIN' %}
+                <!-- Proveedor y Precio: Admin, Owner y Almacén -->
+                {% if user.rol_principal in 'ADMIN OWNER ALMACEN' %}
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Proveedor</span>
                         <strong>{{ repuesto.proveedor.nombre|default:"Sin asignar" }}</strong>

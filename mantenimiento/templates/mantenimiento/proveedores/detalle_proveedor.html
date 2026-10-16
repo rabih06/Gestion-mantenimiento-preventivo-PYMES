@@ -17,7 +17,10 @@
         <a href="{% url 'mantenimiento:lista_proveedores' %}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Volver
         </a>
-        {% if user.rol_principal == 'ADMIN' %}
+        <a href="{% url 'mantenimiento:crear_pedido_proveedor' %}?proveedor={{ proveedor.id }}" class="btn btn-success">
+            <i class="bi bi-cart-plus"></i> Realizar Pedido
+        </a>
+        {% if user.rol_principal in 'OWNER ADMIN' %}
             <a href="{% url 'mantenimiento:editar_proveedor' proveedor.id %}" class="btn btn-warning">
                 <i class="bi bi-pencil"></i> Editar
             </a>
@@ -124,6 +127,56 @@
                             <tr>
                                 <td colspan="3" class="text-center text-muted py-4">
                                     Este proveedor aún no tiene repuestos asignados.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pedidos realizados a este proveedor -->
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-cart-check"></i> Pedidos Recientes de Compra</h5>
+                <a href="{% url 'mantenimiento:crear_pedido_proveedor' %}?proveedor={{ proveedor.id }}" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-plus-circle"></i> Nuevo Pedido
+                </a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Ítem / Repuesto</th>
+                            <th>Cantidad</th>
+                            <th>Total</th>
+                            <th>Estado</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pedido in pedidos_recientes %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'mantenimiento:detalle_pedido_proveedor' pedido.id %}">
+                                        #{{ pedido.id }}
+                                    </a>
+                                </td>
+                                <td>{{ pedido.descripcion_item }}</td>
+                                <td>{{ pedido.cantidad }}</td>
+                                <td>${{ pedido.costo_total }}</td>
+                                <td>
+                                    <span class="badge bg-{% if pedido.estado == 'RECIBIDO' %}success{% elif pedido.estado == 'ENVIADO' %}primary{% elif pedido.estado == 'CANCELADO' %}danger{% else %}warning text-dark{% endif %}">
+                                        {{ pedido.get_estado_display }}
+                                    </span>
+                                </td>
+                                <td><small class="text-muted">{{ pedido.fecha_pedido|date:"d/m/Y" }}</small></td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    No hay pedidos registrados con este proveedor.
                                 </td>
                             </tr>
                         {% endfor %}
