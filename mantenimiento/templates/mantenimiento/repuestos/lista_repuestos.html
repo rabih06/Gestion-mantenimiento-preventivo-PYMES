@@ -4,7 +4,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-box-seam"></i> Inventario de Repuestos</h1>
-    {% if user.rol_principal == 'ADMIN' %}
+    {% if user.rol_principal in 'ADMIN ALMACEN' %}
         <a href="{% url 'mantenimiento:crear_repuesto' %}" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> Nuevo Repuesto
         </a>
@@ -112,7 +112,7 @@
                             <span class="badge bg-secondary">{{ rep.get_tipo_display }}</span>
                         </td>
                         <td>
-                            {% if user.rol_principal == 'ADMIN' %}
+                            {% if user.rol_principal in 'ADMIN OWNER ALMACEN' %}
                                 {{ rep.proveedor.nombre|default:"-" }}
                             {% else %}
                                 <span class="text-muted">-</span>
@@ -126,7 +126,7 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if user.rol_principal == 'ADMIN' %}
+                            {% if user.rol_principal in 'ADMIN OWNER ALMACEN' %}
                                 ${{ rep.precio_unitario }}
                             {% else %}
                                 <span class="text-muted">-</span>
@@ -141,18 +141,34 @@
                                     <i class="bi bi-eye"></i>
                                 </a>
 
-                                <!-- Retirar: Admin y Técnico, solo si hay stock -->
-                                {% if user.rol_principal == 'ADMIN' or user.rol_principal == 'TECNICO' %}
+                                <!-- Ingreso de stock: Administrador de Almacén y Admin -->
+                                {% if user.rol_principal in 'ALMACEN ADMIN' %}
+                                    <a href="{% url 'mantenimiento:ingreso_repuesto' rep.id %}"
+                                       class="btn btn-outline-success" title="Ingresar stock">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </a>
+                                {% endif %}
+
+                                <!-- Salida / Ajuste manual: SOLO Almacén y Admin (Técnico solicita por OT) -->
+                                {% if user.rol_principal in 'ALMACEN ADMIN' %}
                                     {% if rep.cantidad_actual > 0 %}
                                         <a href="{% url 'mantenimiento:retirar_repuesto' rep.id %}"
-                                           class="btn btn-outline-warning" title="Retirar del inventario">
+                                           class="btn btn-outline-warning" title="Salida / Ajuste de almacén">
                                             <i class="bi bi-box-arrow-up"></i>
                                         </a>
                                     {% endif %}
                                 {% endif %}
 
-                                <!-- Editar: SOLO Admin -->
-                                {% if user.rol_principal == 'ADMIN' %}
+                                <!-- Pedido a Proveedor: Owner -->
+                                {% if user.rol_principal == 'OWNER' %}
+                                    <a href="{% url 'mantenimiento:crear_pedido_proveedor' %}?repuesto={{ rep.id }}"
+                                       class="btn btn-outline-info" title="Hacer pedido a proveedor">
+                                        <i class="bi bi-cart-plus"></i>
+                                    </a>
+                                {% endif %}
+
+                                <!-- Editar: Admin y Almacén -->
+                                {% if user.rol_principal in 'ADMIN ALMACEN' %}
                                     <a href="{% url 'mantenimiento:editar_repuesto' rep.id %}"
                                        class="btn btn-outline-secondary" title="Editar">
                                         <i class="bi bi-pencil"></i>

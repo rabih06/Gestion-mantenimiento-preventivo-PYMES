@@ -1,0 +1,80 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Ingreso de Stock - {{ repuesto.nombre }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white py-3">
+                <h4 class="mb-0"><i class="bi bi-box-arrow-in-down"></i> Ingreso de Stock a Almacén</h4>
+            </div>
+            <div class="card-body p-4">
+                <!-- Info del repuesto -->
+                <div class="alert alert-light border mb-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1 text-dark">{{ repuesto.nombre }}</h5>
+                            <span class="badge bg-secondary">SKU: {{ repuesto.codigo_sku }}</span>
+                            <span class="badge bg-info text-dark">{{ repuesto.get_tipo_display }}</span>
+                        </div>
+                        <div class="text-end">
+                            <span class="text-muted d-block small">Stock actual</span>
+                            <strong class="fs-4 text-primary">{{ repuesto.cantidad_actual }}</strong> {{ repuesto.unidad_medida }}(s)
+                        </div>
+                    </div>
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    <!-- Cantidad a ingresar -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ form.cantidad.label }}</label>
+                        {{ form.cantidad }}
+                        {% if form.cantidad.help_text %}
+                            <div class="form-text">{{ form.cantidad.help_text }}</div>
+                        {% endif %}
+                        {% if form.cantidad.errors %}
+                            <div class="text-danger small">{{ form.cantidad.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Precio unitario nuevo -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ form.nuevo_precio_unitario.label }}</label>
+                        {{ form.nuevo_precio_unitario }}
+                        <div class="form-text">Precio actual: ${{ repuesto.precio_unitario }}. {{ form.nuevo_precio_unitario.help_text }}</div>
+                        {% if form.nuevo_precio_unitario.errors %}
+                            <div class="text-danger small">{{ form.nuevo_precio_unitario.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Motivo -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">{{ form.motivo.label }}</label>
+                        {{ form.motivo }}
+                        {% if form.motivo.errors %}
+                            <div class="text-danger small">{{ form.motivo.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'mantenimiento:detalle_repuesto' repuesto.id %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check-circle"></i> Confirmar Ingreso
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -8,8 +8,20 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('redirigir/', views.redirigir_por_rol, name='redirigir_por_rol'),
     path('dashboard/admin/', views.dashboard_admin, name='dashboard_admin'),
+    path('dashboard/owner/', views.dashboard_owner, name='dashboard_owner'),
+    path('dashboard/almacen/', views.dashboard_almacen, name='dashboard_almacen'),
     path('dashboard/tecnico/', views.dashboard_tecnico, name='dashboard_tecnico'),
     path('dashboard/operario/', views.dashboard_operario, name='dashboard_operario'),
+    # Almacén (Gestión de Salidas e Ingresos)
+    path('almacen/solicitudes/', views.solicitudes_repuestos_almacen, name='solicitudes_repuestos_almacen'),
+    path('almacen/solicitudes/<int:orden_repuesto_id>/dar-salida/', views.dar_salida_repuesto, name='dar_salida_repuesto'),
+    path('almacen/solicitudes/<int:orden_repuesto_id>/rechazar/', views.rechazar_repuesto, name='rechazar_repuesto'),
+    path('almacen/repuestos/<int:repuesto_id>/ingreso/', views.ingreso_repuesto, name='ingreso_repuesto'),
+    # Pedidos a Proveedores (Owner)
+    path('pedidos/', views.lista_pedidos_proveedor, name='lista_pedidos_proveedor'),
+    path('pedidos/crear/', views.crear_pedido_proveedor, name='crear_pedido_proveedor'),
+    path('pedidos/<int:pedido_id>/', views.detalle_pedido_proveedor, name='detalle_pedido_proveedor'),
+    path('pedidos/<int:pedido_id>/estado/<str:nuevo_estado>/', views.cambiar_estado_pedido_proveedor, name='cambiar_estado_pedido_proveedor'),
     #Incidencias (Operario)
     path('incidencias/', views.lista_incidencias, name='lista_incidencias'),
     path('incidencias/reportar/', views.reportar_incidencia, name='reportar_incidencia'),

@@ -250,7 +250,7 @@
                 <ul class="nav flex-column">
 
                     {# ============================================ #}
-                    {# SIDEBAR DEL ADMINISTRADOR                     #}
+                    {# SIDEBAR DEL ADMINISTRADOR DE MANTENIMIENTO   #}
                     {# ============================================ #}
                     {% if user.rol_principal == 'ADMIN' %}
                         <li class="nav-item">
@@ -287,8 +287,8 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'mantenimiento:lista_proveedores' %}">
-                                <i class="bi bi-truck"></i> Proveedores
+                            <a class="nav-link" href="{% url 'mantenimiento:solicitudes_repuestos_almacen' %}">
+                                <i class="bi bi-clipboard-pulse"></i> Solicitudes Repuestos
                             </a>
                         </li>
                         <li class="nav-item">
@@ -299,6 +299,82 @@
                         <li class="nav-item">
                             <a class="nav-link" href="/admin/">
                                 <i class="bi bi-gear"></i> Admin Django
+                            </a>
+                        </li>
+
+                    {# ============================================ #}
+                    {# SIDEBAR DEL OWNER (DUEÑO)                    #}
+                    {# ============================================ #}
+                    {% elif user.rol_principal == 'OWNER' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:dashboard_owner' %}">
+                                <i class="bi bi-speedometer2"></i> Panel Ejecutivo
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_proveedores' %}">
+                                <i class="bi bi-truck"></i> Proveedores
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_pedidos_proveedor' %}">
+                                <i class="bi bi-cart-check"></i> Pedidos a Proveedores
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_equipos' %}">
+                                <i class="bi bi-cpu"></i> Flota de Equipos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_repuestos' %}">
+                                <i class="bi bi-box-seam"></i> Catálogo Repuestos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_ordenes' %}">
+                                <i class="bi bi-clipboard-check"></i> Resumen de Órdenes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
+                                <i class="bi bi-bell"></i> Notificaciones
+                                {% if alertas_count > 0 %}
+                                    <span class="badge bg-danger ms-2">{{ alertas_count }}</span>
+                                {% endif %}
+                            </a>
+                        </li>
+
+                    {# ============================================ #}
+                    {# SIDEBAR DEL ADMINISTRADOR DEL ALMACÉN        #}
+                    {# ============================================ #}
+                    {% elif user.rol_principal == 'ALMACEN' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:dashboard_almacen' %}">
+                                <i class="bi bi-boxes"></i> Panel de Almacén
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:solicitudes_repuestos_almacen' %}">
+                                <i class="bi bi-box-arrow-up-right"></i> Salidas / Despacho OTs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_repuestos' %}">
+                                <i class="bi bi-box-seam"></i> Inventario de Repuestos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_pedidos_proveedor' %}">
+                                <i class="bi bi-box-arrow-in-down"></i> Recepción de Pedidos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'mantenimiento:lista_alertas' %}">
+                                <i class="bi bi-bell"></i> Notificaciones
+                                {% if alertas_count > 0 %}
+                                    <span class="badge bg-danger ms-2">{{ alertas_count }}</span>
+                                {% endif %}
                             </a>
                         </li>
 

@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db import transaction
@@ -11,13 +11,14 @@ from .utils import notificar
 from .models import (
     Equipo, CategoriaEquipo, User, Alerta,
     Repuesto, Proveedor, OrdenTrabajo, Incidencia, PlanMantenimiento,
-    MovimientoRepuesto, OrdenRepuesto
+    MovimientoRepuesto, OrdenRepuesto, PedidoProveedor
 )
 
 from .forms import (
     IncidenciaForm, EquipoForm, AtributoEquipoFormSet, RepuestoForm,
     ProveedorForm, PlanMantenimientoForm, RetirarRepuestoForm,
-    OrdenTrabajoForm, OrdenRepuestoFormSet
+    OrdenTrabajoForm, OrdenRepuestoFormSet, EntradaRepuestoForm,
+    RechazarRepuestoForm, PedidoProveedorForm
 )
 
 
@@ -47,6 +48,10 @@ def redirigir_por_rol(request):
 
     if rol == 'ADMIN':
         return redirect('mantenimiento:dashboard_admin')
+    elif rol == 'OWNER':
+        return redirect('mantenimiento:dashboard_owner')
+    elif rol == 'ALMACEN':
+        return redirect('mantenimiento:dashboard_almacen')
     elif rol == 'TECNICO':
         return redirect('mantenimiento:dashboard_tecnico')
     elif rol == 'OPERARIO':
@@ -112,12 +117,16 @@ def dashboard_admin(request):
     .order_by('-created_at')[:5]
 )
 
+    # Solicitudes de repuestos pendientes por entregar de almacén
+    solicitudes_repuestos_pendientes = OrdenRepuesto.objects.filter(estado='PENDIENTE').count()
+
     context = {
         'total_equipos': total_equipos,
         'ordenes_abiertas': ordenes_abiertas,
         'alertas_activas': alertas_activas,
         'incidencias_pendientes': incidencias_pendientes,
         'repuestos_bajos': repuestos_bajos,
+        'solicitudes_repuestos_pendientes': solicitudes_repuestos_pendientes,
         'estados_labels': estados_labels,
         'estados_data': estados_data,
         'ultimas_ordenes': ultimas_ordenes,
@@ -242,7 +251,7 @@ def lista_incidencias(request):
 
 @login_required
 def lista_alertas(request):
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OPERARIO']:
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OPERARIO', 'OWNER', 'ALMACEN']:
         messages.error(request, 'No tienes permiso para ver las notificaciones.')
         return redirect('mantenimiento:redirigir_por_rol')
 
@@ -522,7 +531,7 @@ def eliminar_equipo(request, equipo_id):
 @login_required
 def lista_repuestos(request):
     """Lista de repuestos con búsqueda, filtros y paginación."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OWNER', 'ALMACEN']:
         messages.error(request, 'No tienes permiso para ver los repuestos.')
         return redirect('mantenimiento:redirigir_por_rol')
 
@@ -586,7 +595,7 @@ def lista_repuestos(request):
 @login_required
 def detalle_repuesto(request, repuesto_id):
     """Vista detallada de un repuesto."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OWNER', 'ALMACEN']:
         messages.error(request, 'No tienes permiso para ver los repuestos.')
         return redirect('mantenimiento:redirigir_por_rol')
 
@@ -695,9 +704,17 @@ def eliminar_repuesto(request, repuesto_id):
 
 @login_required
 def retirar_repuesto(request, repuesto_id):
-    """Permite al técnico retirar repuestos del inventario."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
-        messages.error(request, 'No tienes permiso para retirar repuestos.')
+    """Permite al Administrador de Almacén registrar una salida manual de repuestos."""
+    if request.user.rol_principal == 'TECNICO':
+        messages.error(
+            request,
+            '🚫 Los técnicos no tienen acceso libre a retirar repuestos. '
+            'Debes solicitar el repuesto dentro de tu orden de trabajo para que el Administrador de Almacén autorice la salida.'
+        )
+        return redirect('mantenimiento:lista_repuestos')
+
+    if request.user.rol_principal not in ['ALMACEN', 'ADMIN']:
+        messages.error(request, 'Solo el Administrador del Almacén puede retirar repuestos.')
         return redirect('mantenimiento:redirigir_por_rol')
 
     repuesto = get_object_or_404(Repuesto, id=repuesto_id)
@@ -739,7 +756,7 @@ def retirar_repuesto(request, repuesto_id):
 @login_required
 def historial_movimientos(request, repuesto_id):
     """Muestra el historial de movimientos de un repuesto (auditoría)."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OWNER', 'ALMACEN']:
         messages.error(request, 'No tienes permiso para ver los movimientos.')
         return redirect('mantenimiento:redirigir_por_rol')
 
@@ -757,15 +774,14 @@ def historial_movimientos(request, repuesto_id):
 
 
 # =====================================================
-# CRUD DE PROVEEDORES (SOLO ADMIN)
+# CRUD DE PROVEEDORES (COMPETENCIA DEL OWNER)
 # =====================================================
 
 @login_required
 def lista_proveedores(request):
-    """Lista de proveedores con búsqueda, filtros y paginación. SOLO ADMIN."""
-    # ✅ FIX: Técnico ya no puede ver proveedores
-    if request.user.rol_principal != 'ADMIN':
-        messages.error(request, 'Solo los administradores pueden ver los proveedores.')
+    """Lista de proveedores con búsqueda, filtros y paginación. Gestionado por el Owner."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN']:
+        messages.error(request, 'Solo el Dueño (Owner) o Administrador pueden ver los proveedores.')
         return redirect('mantenimiento:redirigir_por_rol')
 
     proveedores = Proveedor.objects.all()
@@ -815,14 +831,14 @@ def lista_proveedores(request):
 
 @login_required
 def detalle_proveedor(request, proveedor_id):
-    """Vista detallada de un proveedor. SOLO ADMIN."""
-    # ✅ FIX: Técnico ya no puede ver proveedores
-    if request.user.rol_principal != 'ADMIN':
-        messages.error(request, 'Solo los administradores pueden ver los proveedores.')
+    """Vista detallada de un proveedor y sus pedidos asociados."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN']:
+        messages.error(request, 'Solo el Dueño (Owner) o Administrador pueden ver los proveedores.')
         return redirect('mantenimiento:redirigir_por_rol')
 
     proveedor = get_object_or_404(Proveedor, id=proveedor_id)
     repuestos = proveedor.repuestos.all().order_by('nombre')
+    pedidos_recientes = proveedor.pedidos.all().order_by('-fecha_pedido')[:10]
 
     total_repuestos = repuestos.count()
     repuestos_stock_bajo = sum(1 for r in repuestos if r.stock_bajo)
@@ -830,6 +846,7 @@ def detalle_proveedor(request, proveedor_id):
     context = {
         'proveedor': proveedor,
         'repuestos': repuestos,
+        'pedidos_recientes': pedidos_recientes,
         'total_repuestos': total_repuestos,
         'repuestos_stock_bajo': repuestos_stock_bajo,
     }
@@ -838,9 +855,9 @@ def detalle_proveedor(request, proveedor_id):
 
 @login_required
 def crear_proveedor(request):
-    """Crear un nuevo proveedor (solo ADMIN)."""
-    if request.user.rol_principal != 'ADMIN':
-        messages.error(request, 'Solo los administradores pueden crear proveedores.')
+    """Crear un nuevo proveedor (Owner o Admin)."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN']:
+        messages.error(request, 'Solo el Dueño (Owner) puede registrar proveedores.')
         return redirect('mantenimiento:lista_proveedores')
 
     if request.method == 'POST':
@@ -861,9 +878,9 @@ def crear_proveedor(request):
 
 @login_required
 def editar_proveedor(request, proveedor_id):
-    """Editar un proveedor (solo ADMIN)."""
-    if request.user.rol_principal != 'ADMIN':
-        messages.error(request, 'Solo los administradores pueden editar proveedores.')
+    """Editar un proveedor (Owner o Admin)."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN']:
+        messages.error(request, 'Solo el Dueño (Owner) puede editar proveedores.')
         return redirect('mantenimiento:lista_proveedores')
 
     proveedor = get_object_or_404(Proveedor, id=proveedor_id)
@@ -887,9 +904,9 @@ def editar_proveedor(request, proveedor_id):
 
 @login_required
 def eliminar_proveedor(request, proveedor_id):
-    """Eliminar un proveedor (solo ADMIN)."""
-    if request.user.rol_principal != 'ADMIN':
-        messages.error(request, 'Solo los administradores pueden eliminar proveedores.')
+    """Eliminar un proveedor (Owner o Admin)."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN']:
+        messages.error(request, 'Solo el Dueño (Owner) puede eliminar proveedores.')
         return redirect('mantenimiento:lista_proveedores')
 
     proveedor = get_object_or_404(Proveedor, id=proveedor_id)
@@ -919,7 +936,7 @@ def eliminar_proveedor(request, proveedor_id):
 @login_required
 def lista_planes(request):
     """Lista de planes con búsqueda, filtros y paginación."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OWNER']:
         messages.error(request, 'No tienes permiso para ver los planes.')
         return redirect('mantenimiento:redirigir_por_rol')
 
@@ -1019,7 +1036,7 @@ def lista_planes(request):
 @login_required
 def detalle_plan(request, plan_id):
     """Vista detallada de un plan con su historial de OTs."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OWNER']:
         messages.error(request, 'No tienes permiso para ver los planes.')
         return redirect('mantenimiento:redirigir_por_rol')
 
@@ -1175,7 +1192,7 @@ def aplicar_plan(request, plan_id):
 @login_required
 def lista_ordenes(request):
     """Lista de órdenes de trabajo con filtros."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OWNER']:
         messages.error(request, 'No tienes permiso para ver las órdenes.')
         return redirect('mantenimiento:redirigir_por_rol')
 
@@ -1209,7 +1226,7 @@ def lista_ordenes(request):
         ordenes = ordenes.filter(prioridad=prioridad_filtro)
 
     tecnico_filtro = request.GET.get('tecnico', '')
-    if tecnico_filtro and request.user.rol_principal == 'ADMIN':
+    if tecnico_filtro and request.user.rol_principal in ['ADMIN', 'OWNER']:
         ordenes = ordenes.filter(tecnico_id=tecnico_filtro)
 
     equipo_filtro = request.GET.get('equipo', '')
@@ -1262,7 +1279,7 @@ def lista_ordenes(request):
 @login_required
 def detalle_orden(request, orden_id):
     """Vista detallada de una orden con posibilidad de añadir repuestos."""
-    if request.user.rol_principal not in ['TECNICO', 'ADMIN']:
+    if request.user.rol_principal not in ['TECNICO', 'ADMIN', 'OWNER']:
         return redirect('mantenimiento:redirigir_por_rol')
 
     orden = get_object_or_404(OrdenTrabajo, id=orden_id)
@@ -1276,13 +1293,31 @@ def detalle_orden(request, orden_id):
     if request.method == 'POST' and puede_editar_repuestos:
         formset = OrdenRepuestoFormSet(request.POST, instance=orden)
         if formset.is_valid():
-            formset.save()
-            messages.success(request, '✅ Repuestos actualizados.')
+            instances = formset.save(commit=False)
+            nuevos_pedidos = 0
+            for item in instances:
+                if not item.pk:
+                    item.solicitado_por = request.user
+                    item.estado = 'PENDIENTE'
+                    nuevos_pedidos += 1
+                item.save()
+            formset.save_m2m()
+            for obj in formset.deleted_objects:
+                obj.delete()
+            orden.recalcular_costo_total()
+            if nuevos_pedidos > 0:
+                messages.success(
+                    request,
+                    f'✅ Se registraron {nuevos_pedidos} solicitud(es) de repuestos. '
+                    'El Administrador del Almacén ha sido notificado para autorizar la salida.'
+                )
+            else:
+                messages.success(request, '✅ Lista de repuestos de la orden actualizada.')
             return redirect('mantenimiento:detalle_orden', orden_id=orden.id)
     else:
         formset = OrdenRepuestoFormSet(instance=orden)
 
-    repuestos_usados = orden.repuestos_usados.select_related('repuesto')
+    repuestos_usados = orden.repuestos_usados.select_related('repuesto', 'solicitado_por', 'despachado_por')
     repuestos_disponibles = Repuesto.objects.filter(cantidad_actual__gt=0)
 
     context = {
@@ -1463,7 +1498,7 @@ def cambiar_estado_orden(request, orden_id, nuevo_estado):
 @login_required
 def lista_incidencias_admin(request):
     """Lista completa de incidencias para admin y técnicos."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OWNER']:
         messages.error(request, 'No tienes permiso para ver esta sección.')
         return redirect('mantenimiento:redirigir_por_rol')
 
@@ -1529,7 +1564,7 @@ def lista_incidencias_admin(request):
 @login_required
 def detalle_incidencia(request, incidencia_id):
     """Vista detallada de una incidencia con acciones."""
-    if request.user.rol_principal not in ['ADMIN', 'TECNICO']:
+    if request.user.rol_principal not in ['ADMIN', 'TECNICO', 'OWNER']:
         messages.error(request, 'No tienes permiso para ver esta incidencia.')
         return redirect('mantenimiento:redirigir_por_rol')
 
@@ -1808,3 +1843,521 @@ def home_view(request):
     if request.user.is_authenticated:
         return redirect('mantenimiento:redirigir_por_rol')
     return redirect('mantenimiento:login')
+
+
+# =====================================================
+# VISTAS DEL ADMINISTRADOR DE ALMACÉN
+# =====================================================
+
+@login_required
+def dashboard_almacen(request):
+    """Dashboard principal para el Administrador de Almacén."""
+    if request.user.rol_principal not in ['ALMACEN', 'ADMIN']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    # Solicitudes pendientes de salida vinculadas a OTs
+    solicitudes_pendientes = OrdenRepuesto.objects.filter(
+        estado='PENDIENTE'
+    ).select_related(
+        'orden', 'repuesto', 'orden__equipo', 'orden__tecnico', 'solicitado_por'
+    ).order_by('-orden__prioridad', '-created_at')
+
+    total_solicitudes_pendientes = solicitudes_pendientes.count()
+
+    # Repuestos e inventario
+    total_repuestos = Repuesto.objects.count()
+    repuestos_bajos = [r for r in Repuesto.objects.all() if r.stock_bajo]
+    total_repuestos_bajos = len(repuestos_bajos)
+
+    # Valor monetario total del inventario en almacén
+    valor_inventario = sum(r.cantidad_actual * r.precio_unitario for r in Repuesto.objects.all())
+
+    # Movimientos recientes de almacén
+    ultimos_movimientos = MovimientoRepuesto.objects.select_related(
+        'repuesto', 'usuario', 'orden'
+    ).order_by('-created_at')[:8]
+
+    # Alertas activas para almacén
+    alertas_no_leidas = (
+        Alerta.objects.visibles_para(request.user)
+        .exclude(leida_por=request.user)
+        .order_by('-created_at')[:5]
+    )
+
+    context = {
+        'solicitudes_pendientes': solicitudes_pendientes[:8],
+        'total_solicitudes_pendientes': total_solicitudes_pendientes,
+        'total_repuestos': total_repuestos,
+        'repuestos_bajos': repuestos_bajos[:5],
+        'total_repuestos_bajos': total_repuestos_bajos,
+        'valor_inventario': valor_inventario,
+        'ultimos_movimientos': ultimos_movimientos,
+        'alertas_no_leidas': alertas_no_leidas,
+    }
+    return render(request, 'mantenimiento/almacen/dashboard_almacen.html', context)
+
+
+@login_required
+def solicitudes_repuestos_almacen(request):
+    """Listado completo y filtrable de solicitudes de repuestos para OTs."""
+    if request.user.rol_principal not in ['ALMACEN', 'ADMIN']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    estado_filtro = request.GET.get('estado', 'PENDIENTE')
+    q = request.GET.get('q', '').strip()
+
+    solicitudes = OrdenRepuesto.objects.select_related(
+        'orden', 'repuesto', 'orden__equipo', 'orden__tecnico', 'solicitado_por', 'despachado_por'
+    ).order_by('-created_at')
+
+    if estado_filtro and estado_filtro != 'TODOS':
+        solicitudes = solicitudes.filter(estado=estado_filtro)
+
+    if q:
+        solicitudes = solicitudes.filter(
+            Q(repuesto__nombre__icontains=q) |
+            Q(repuesto__codigo_sku__icontains=q) |
+            Q(orden__id__icontains=q) |
+            Q(orden__equipo__codigo_interno__icontains=q)
+        )
+
+    paginator = Paginator(solicitudes, 15)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    total_pendientes = OrdenRepuesto.objects.filter(estado='PENDIENTE').count()
+    total_despachadas = OrdenRepuesto.objects.filter(estado='DESPACHADO').count()
+    total_rechazadas = OrdenRepuesto.objects.filter(estado='RECHAZADO').count()
+
+    context = {
+        'page_obj': page_obj,
+        'estado_filtro': estado_filtro,
+        'q': q,
+        'total_pendientes': total_pendientes,
+        'total_despachadas': total_despachadas,
+        'total_rechazadas': total_rechazadas,
+    }
+    return render(request, 'mantenimiento/almacen/solicitudes_repuestos.html', context)
+
+
+@login_required
+def dar_salida_repuesto(request, orden_repuesto_id):
+    """El Administrador de Almacén da salida física al repuesto pedido por el técnico."""
+    if request.user.rol_principal not in ['ALMACEN', 'ADMIN']:
+        messages.error(request, 'Solo el Administrador del Almacén puede autorizar salidas de repuestos.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    orden_repuesto = get_object_or_404(
+        OrdenRepuesto.objects.select_related('orden', 'repuesto', 'orden__equipo', 'orden__tecnico', 'solicitado_por'),
+        id=orden_repuesto_id
+    )
+
+    if orden_repuesto.estado != 'PENDIENTE':
+        messages.warning(request, f'Esta solicitud ya fue procesada anteriormente ({orden_repuesto.get_estado_display()}).')
+        return redirect('mantenimiento:solicitudes_repuestos_almacen')
+
+    repuesto = orden_repuesto.repuesto
+
+    if request.method == 'POST':
+        # Validar existencia de stock
+        if repuesto.cantidad_actual < orden_repuesto.cantidad_utilizada:
+            messages.error(
+                request,
+                f'❌ Stock insuficiente de "{repuesto.nombre}". '
+                f'Disponible en almacén: {repuesto.cantidad_actual} {repuesto.unidad_medida}(s), '
+                f'Solicitado: {orden_repuesto.cantidad_utilizada}. No se puede dar salida.'
+            )
+            return redirect('mantenimiento:solicitudes_repuestos_almacen')
+
+        with transaction.atomic():
+            cantidad_anterior = repuesto.cantidad_actual
+            repuesto.cantidad_actual -= orden_repuesto.cantidad_utilizada
+            repuesto.fecha_ultima_salida = timezone.now()
+            repuesto.save()
+
+            orden_repuesto.estado = 'DESPACHADO'
+            orden_repuesto.fecha_despacho = timezone.now()
+            orden_repuesto.despachado_por = request.user
+            if not orden_repuesto.precio_unitario_momento or orden_repuesto.precio_unitario_momento == 0:
+                orden_repuesto.precio_unitario_momento = repuesto.precio_unitario
+            orden_repuesto.save()
+
+            # Registrar movimiento de auditoría
+            MovimientoRepuesto.objects.create(
+                repuesto=repuesto,
+                tipo='SALIDA',
+                cantidad=orden_repuesto.cantidad_utilizada,
+                cantidad_anterior=cantidad_anterior,
+                cantidad_nueva=repuesto.cantidad_actual,
+                motivo=f'Salida despachada para OT #{orden_repuesto.orden.id} ({orden_repuesto.orden.equipo.codigo_interno})',
+                usuario=request.user,
+                orden=orden_repuesto.orden,
+            )
+
+            # Recalcular costo acumulado de la OT
+            orden_repuesto.orden.recalcular_costo_total()
+
+        # Notificar al Administrador de Mantenimiento y al Técnico asignado
+        destinatarios = []
+        if orden_repuesto.orden.tecnico:
+            destinatarios.append(orden_repuesto.orden.tecnico)
+        if orden_repuesto.solicitado_por and orden_repuesto.solicitado_por != orden_repuesto.orden.tecnico:
+            destinatarios.append(orden_repuesto.solicitado_por)
+        admins = list(User.objects.filter(rol_principal='ADMIN', is_active=True))
+        destinatarios = list(set(destinatarios + admins))
+
+        nombre_almacenero = request.user.get_full_name() or request.user.username
+        mensaje = (
+            f"✅ Salida de Almacén: Se despacharon {orden_repuesto.cantidad_utilizada} "
+            f"{repuesto.unidad_medida}(s) de \"{repuesto.nombre}\" para OT #{orden_repuesto.orden.id} "
+            f"({orden_repuesto.orden.equipo.codigo_interno}) por {nombre_almacenero}."
+        )
+
+        notificar(
+            tipo='DESPACHO_REPUESTO',
+            mensaje=mensaje,
+            repuesto=repuesto,
+            equipo=orden_repuesto.orden.equipo,
+            usuarios=destinatarios,
+            evitar_duplicados_minutos=0,
+        )
+
+        messages.success(
+            request,
+            f'✅ Se dio salida exitosa a {orden_repuesto.cantidad_utilizada} {repuesto.unidad_medida}(s) '
+            f'de "{repuesto.nombre}" para la OT #{orden_repuesto.orden.id}. Stock en almacén: {repuesto.cantidad_actual}.'
+        )
+
+    return redirect('mantenimiento:solicitudes_repuestos_almacen')
+
+
+@login_required
+def rechazar_repuesto(request, orden_repuesto_id):
+    """El Administrador de Almacén rechaza la solicitud de un repuesto."""
+    if request.user.rol_principal not in ['ALMACEN', 'ADMIN']:
+        messages.error(request, 'No tienes permiso para rechazar repuestos.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    orden_repuesto = get_object_or_404(
+        OrdenRepuesto.objects.select_related('orden', 'repuesto', 'orden__equipo', 'orden__tecnico', 'solicitado_por'),
+        id=orden_repuesto_id
+    )
+
+    if orden_repuesto.estado != 'PENDIENTE':
+        messages.warning(request, f'Esta solicitud ya fue procesada anteriormente ({orden_repuesto.get_estado_display()}).')
+        return redirect('mantenimiento:solicitudes_repuestos_almacen')
+
+    if request.method == 'POST':
+        motivo = request.POST.get('motivo_rechazo', '').strip()
+        if not motivo:
+            motivo = 'Rechazado por el Administrador de Almacén (sin motivo especificado)'
+
+        orden_repuesto.estado = 'RECHAZADO'
+        orden_repuesto.motivo_rechazo = motivo
+        orden_repuesto.despachado_por = request.user
+        orden_repuesto.fecha_despacho = timezone.now()
+        orden_repuesto.save()
+
+        # Notificar al técnico y admin
+        destinatarios = []
+        if orden_repuesto.orden.tecnico:
+            destinatarios.append(orden_repuesto.orden.tecnico)
+        if orden_repuesto.solicitado_por:
+            destinatarios.append(orden_repuesto.solicitado_por)
+        admins = list(User.objects.filter(rol_principal='ADMIN', is_active=True))
+        destinatarios = list(set(destinatarios + admins))
+
+        mensaje = (
+            f"❌ Solicitud rechazada: {orden_repuesto.cantidad_utilizada}x \"{orden_repuesto.repuesto.nombre}\" "
+            f"para OT #{orden_repuesto.orden.id}. Motivo: {motivo}."
+        )
+
+        notificar(
+            tipo='RECHAZO_REPUESTO',
+            mensaje=mensaje,
+            repuesto=orden_repuesto.repuesto,
+            equipo=orden_repuesto.orden.equipo,
+            usuarios=destinatarios,
+            evitar_duplicados_minutos=0,
+        )
+
+        messages.warning(request, f'Solicitud rechazada para OT #{orden_repuesto.orden.id}.')
+
+    return redirect('mantenimiento:solicitudes_repuestos_almacen')
+
+
+@login_required
+def ingreso_repuesto(request, repuesto_id):
+    """Permite al Administrador del Almacén ingresar stock directo a un repuesto."""
+    if request.user.rol_principal not in ['ALMACEN', 'ADMIN']:
+        messages.error(request, 'No tienes permiso para registrar entradas de inventario.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    repuesto = get_object_or_404(Repuesto, id=repuesto_id)
+
+    if request.method == 'POST':
+        form = EntradaRepuestoForm(request.POST)
+        if form.is_valid():
+            cantidad = form.cleaned_data['cantidad']
+            nuevo_precio = form.cleaned_data.get('nuevo_precio_unitario')
+            motivo = form.cleaned_data.get('motivo') or 'Ingreso manual al almacén'
+            cantidad_anterior = repuesto.cantidad_actual
+
+            repuesto.cantidad_actual += cantidad
+            repuesto.fecha_ultima_entrada = timezone.now()
+            if nuevo_precio is not None:
+                repuesto.precio_unitario = nuevo_precio
+            repuesto.save()
+
+            MovimientoRepuesto.objects.create(
+                repuesto=repuesto,
+                tipo='ENTRADA',
+                cantidad=cantidad,
+                cantidad_anterior=cantidad_anterior,
+                cantidad_nueva=repuesto.cantidad_actual,
+                motivo=motivo,
+                usuario=request.user,
+            )
+
+            messages.success(
+                request,
+                f'✅ Se ingresaron {cantidad} {repuesto.unidad_medida}(s) de "{repuesto.nombre}". '
+                f'Nuevo stock en almacén: {repuesto.cantidad_actual}.'
+            )
+            return redirect('mantenimiento:detalle_repuesto', repuesto_id=repuesto.id)
+    else:
+        form = EntradaRepuestoForm()
+
+    return render(request, 'mantenimiento/almacen/ingreso_repuesto.html', {
+        'form': form,
+        'repuesto': repuesto,
+    })
+
+
+# =====================================================
+# VISTAS DEL OWNER (DUEÑO DE LA EMPRESA)
+# =====================================================
+
+@login_required
+def dashboard_owner(request):
+    """Dashboard ejecutivo para el Owner / Dueño de la empresa."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    # Métricas de flota y maquinaria
+    total_equipos = Equipo.objects.count()
+    equipos_activos = Equipo.objects.filter(estado_operativo='ACTIVO').count()
+    equipos_mantenimiento = Equipo.objects.filter(estado_operativo='MANTENIMIENTO').count()
+    equipos_fuera = Equipo.objects.filter(estado_operativo__in=['FUERA_SERVICIO', 'BAJA']).count()
+    porcentaje_disponibilidad = round((equipos_activos / total_equipos * 100), 1) if total_equipos > 0 else 0
+
+    # Inversión monetaria en inventario
+    valor_inventario = sum(r.cantidad_actual * r.precio_unitario for r in Repuesto.objects.all())
+
+    # Gasto acumulado en órdenes de trabajo completadas
+    total_gasto_mantenimiento = OrdenTrabajo.objects.filter(
+        estado='COMPLETADA'
+    ).aggregate(total=Sum('costo_total'))['total'] or 0
+
+    # Proveedores y pedidos
+    total_proveedores = Proveedor.objects.count()
+    proveedores_activos = Proveedor.objects.filter(is_active=True).count()
+
+    pedidos_pendientes = PedidoProveedor.objects.filter(estado__in=['PENDIENTE', 'ENVIADO']).count()
+    gasto_pedidos_activos = PedidoProveedor.objects.filter(
+        estado__in=['PENDIENTE', 'ENVIADO']
+    ).aggregate(total=Sum('costo_total'))['total'] or 0
+
+    ultimos_pedidos = PedidoProveedor.objects.select_related(
+        'proveedor', 'repuesto', 'creado_por'
+    ).order_by('-fecha_pedido')[:6]
+
+    # Alertas visibles para el Owner
+    ultimas_alertas = (
+        Alerta.objects.visibles_para(request.user)
+        .exclude(leida_por=request.user)
+        .order_by('-created_at')[:5]
+    )
+
+    context = {
+        'total_equipos': total_equipos,
+        'equipos_activos': equipos_activos,
+        'equipos_mantenimiento': equipos_mantenimiento,
+        'equipos_fuera': equipos_fuera,
+        'porcentaje_disponibilidad': porcentaje_disponibilidad,
+        'valor_inventario': valor_inventario,
+        'total_gasto_mantenimiento': total_gasto_mantenimiento,
+        'total_proveedores': total_proveedores,
+        'proveedores_activos': proveedores_activos,
+        'pedidos_pendientes': pedidos_pendientes,
+        'gasto_pedidos_activos': gasto_pedidos_activos,
+        'ultimos_pedidos': ultimos_pedidos,
+        'ultimas_alertas': ultimas_alertas,
+    }
+    return render(request, 'mantenimiento/owner/dashboard_owner.html', context)
+
+
+@login_required
+def lista_pedidos_proveedor(request):
+    """Lista de pedidos de compras a proveedores (Owner)."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN', 'ALMACEN']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    estado_filtro = request.GET.get('estado', '')
+    proveedor_filtro = request.GET.get('proveedor', '')
+    q = request.GET.get('q', '').strip()
+
+    pedidos = PedidoProveedor.objects.select_related(
+        'proveedor', 'repuesto', 'creado_por'
+    ).order_by('-fecha_pedido')
+
+    if estado_filtro:
+        pedidos = pedidos.filter(estado=estado_filtro)
+    if proveedor_filtro:
+        pedidos = pedidos.filter(proveedor_id=proveedor_filtro)
+    if q:
+        pedidos = pedidos.filter(
+            Q(descripcion_item__icontains=q) |
+            Q(proveedor__nombre__icontains=q) |
+            Q(observaciones__icontains=q)
+        )
+
+    paginator = Paginator(pedidos, 10)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    proveedores = Proveedor.objects.filter(is_active=True).order_by('nombre')
+
+    context = {
+        'page_obj': page_obj,
+        'proveedores': proveedores,
+        'estado_filtro': estado_filtro,
+        'proveedor_filtro': proveedor_filtro,
+        'q': q,
+        'total_pedidos': pedidos.count(),
+    }
+    return render(request, 'mantenimiento/owner/pedidos/lista_pedidos.html', context)
+
+
+@login_required
+def crear_pedido_proveedor(request):
+    """Crear un nuevo pedido a proveedor (Owner)."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN']:
+        messages.error(request, 'Solo el Dueño (Owner) puede realizar pedidos a proveedores.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    initial = {}
+    if request.GET.get('proveedor'):
+        initial['proveedor'] = request.GET.get('proveedor')
+    if request.GET.get('repuesto'):
+        initial['repuesto'] = request.GET.get('repuesto')
+        try:
+            r = Repuesto.objects.get(id=request.GET.get('repuesto'))
+            initial['descripcion_item'] = f"{r.codigo_sku} - {r.nombre}"
+            initial['precio_unitario_estimado'] = r.precio_unitario
+            if r.proveedor:
+                initial['proveedor'] = r.proveedor.id
+        except Repuesto.DoesNotExist:
+            pass
+
+    if request.method == 'POST':
+        form = PedidoProveedorForm(request.POST)
+        if form.is_valid():
+            pedido = form.save(commit=False)
+            pedido.creado_por = request.user
+            pedido.save()
+
+            # Notificar al Almacén, Dueño y Admin
+            notificar(
+                tipo='PEDIDO_PROVEEDOR_CREADO',
+                mensaje=f"🛒 Nuevo pedido a proveedor #{pedido.id}: {pedido.cantidad}x {pedido.descripcion_item} a {pedido.proveedor.nombre} (${pedido.costo_total}).",
+                notificar_owner=True,
+                notificar_almacen=True,
+                notificar_admins=True,
+                evitar_duplicados_minutos=0,
+            )
+
+            messages.success(request, f'✅ Pedido #{pedido.id} a {pedido.proveedor.nombre} registrado con éxito.')
+            return redirect('mantenimiento:detalle_pedido_proveedor', pedido_id=pedido.id)
+    else:
+        form = PedidoProveedorForm(initial=initial)
+
+    return render(request, 'mantenimiento/owner/pedidos/form_pedido.html', {
+        'form': form,
+        'titulo': 'Nuevo Pedido a Proveedor',
+    })
+
+
+@login_required
+def detalle_pedido_proveedor(request, pedido_id):
+    """Detalle de una orden de compra a proveedor."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN', 'ALMACEN']:
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    pedido = get_object_or_404(
+        PedidoProveedor.objects.select_related('proveedor', 'repuesto', 'creado_por'),
+        id=pedido_id
+    )
+
+    return render(request, 'mantenimiento/owner/pedidos/detalle_pedido.html', {'pedido': pedido})
+
+
+@login_required
+def cambiar_estado_pedido_proveedor(request, pedido_id, nuevo_estado):
+    """Cambia el estado de un pedido (ENVIADO, RECIBIDO, CANCELADO)."""
+    if request.user.rol_principal not in ['OWNER', 'ADMIN', 'ALMACEN']:
+        messages.error(request, 'No tienes permiso para actualizar este pedido.')
+        return redirect('mantenimiento:redirigir_por_rol')
+
+    pedido = get_object_or_404(
+        PedidoProveedor.objects.select_related('proveedor', 'repuesto'),
+        id=pedido_id
+    )
+
+    estados_validos = ['PENDIENTE', 'ENVIADO', 'RECIBIDO', 'CANCELADO']
+    if nuevo_estado not in estados_validos:
+        messages.error(request, 'Estado no válido.')
+        return redirect('mantenimiento:detalle_pedido_proveedor', pedido_id=pedido.id)
+
+    if nuevo_estado == 'RECIBIDO' and pedido.estado != 'RECIBIDO':
+        with transaction.atomic():
+            pedido.estado = 'RECIBIDO'
+            pedido.fecha_recepcion = timezone.now()
+            pedido.save()
+
+            # Si está vinculado a un repuesto, ingresar automáticamente al inventario
+            if pedido.repuesto:
+                rep = pedido.repuesto
+                cantidad_ant = rep.cantidad_actual
+                rep.cantidad_actual += pedido.cantidad
+                rep.fecha_ultima_entrada = timezone.now()
+                if pedido.precio_unitario_estimado > 0:
+                    rep.precio_unitario = pedido.precio_unitario_estimado
+                rep.save()
+
+                MovimientoRepuesto.objects.create(
+                    repuesto=rep,
+                    tipo='ENTRADA',
+                    cantidad=pedido.cantidad,
+                    cantidad_anterior=cantidad_ant,
+                    cantidad_nueva=rep.cantidad_actual,
+                    motivo=f'Recepción de Pedido a Proveedor #{pedido.id} ({pedido.proveedor.nombre})',
+                    usuario=request.user,
+                )
+
+        notificar(
+            tipo='PEDIDO_PROVEEDOR_RECIBIDO',
+            mensaje=f"📦 Pedido recibido #{pedido.id}: {pedido.cantidad}x {pedido.descripcion_item} de {pedido.proveedor.nombre} ingresado a almacén.",
+            notificar_almacen=True,
+            notificar_owner=True,
+            notificar_admins=True,
+            evitar_duplicados_minutos=0,
+        )
+
+        messages.success(request, f'✅ Pedido #{pedido.id} recibido. El stock del almacén ha sido incrementado.')
+
+    else:
+        pedido.estado = nuevo_estado
+        pedido.save()
+        messages.info(request, f'Estado del pedido #{pedido.id} actualizado a {pedido.get_estado_display()}.')
+
+    return redirect('mantenimiento:detalle_pedido_proveedor', pedido_id=pedido.id)

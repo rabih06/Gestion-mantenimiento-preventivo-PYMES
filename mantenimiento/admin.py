@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from .models import (
     User, Proveedor, Repuesto, CategoriaEquipo, Equipo,
     PlanMantenimiento, Incidencia, OrdenTrabajo, OrdenRepuesto,
-    HistorialEstadoEquipo, Alerta, AtributoEquipo
+    HistorialEstadoEquipo, Alerta, AtributoEquipo, PedidoProveedor
 )
 
 
@@ -108,8 +108,16 @@ class OrdenTrabajoAdmin(admin.ModelAdmin):
 
 @admin.register(OrdenRepuesto)
 class OrdenRepuestoAdmin(admin.ModelAdmin):
-    list_display = ('orden', 'repuesto', 'cantidad_utilizada', 'precio_unitario_momento')
-    search_fields = ('orden__id', 'repuesto__nombre')
+    list_display = ('orden', 'repuesto', 'cantidad_utilizada', 'estado', 'solicitado_por', 'despachado_por', 'fecha_despacho')
+    list_filter = ('estado', 'created_at')
+    search_fields = ('orden__id', 'repuesto__nombre', 'repuesto__codigo_sku')
+
+
+@admin.register(PedidoProveedor)
+class PedidoProveedorAdmin(admin.ModelAdmin):
+    list_display = ('id', 'proveedor', 'descripcion_item', 'cantidad', 'precio_unitario_estimado', 'costo_total', 'estado', 'fecha_pedido')
+    list_filter = ('estado', 'proveedor', 'fecha_pedido')
+    search_fields = ('descripcion_item', 'proveedor__nombre')
 
 
 @admin.register(HistorialEstadoEquipo)

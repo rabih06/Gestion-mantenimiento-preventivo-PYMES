@@ -9,6 +9,7 @@ from .models import Alerta, User
 
 def notificar(tipo, mensaje, equipo=None, repuesto=None, plan=None, 
               usuarios=None, notificar_admins=True, notificar_tecnicos=False,
+              notificar_almacen=False, notificar_owner=False,
               evitar_duplicados_minutos=60):
     """
     Crea una notificación/alerta con destinatarios específicos.
@@ -19,8 +20,10 @@ def notificar(tipo, mensaje, equipo=None, repuesto=None, plan=None,
         equipo/repuesto/plan: Objetos relacionados (opcional)
         usuarios: Lista/queryset de usuarios específicos. Si se da, sobreescribe
                   notificar_admins y notificar_tecnicos.
-        notificar_admins: Si True, incluye a todos los admins activos
+        notificar_admins: Si True, incluye a todos los administradores de mantenimiento activos
         notificar_tecnicos: Si True, incluye a todos los técnicos activos
+        notificar_almacen: Si True, incluye a administradores de almacén activos
+        notificar_owner: Si True, incluye a los usuarios owner/dueño activos
         evitar_duplicados_minutos: Ventana para evitar duplicados
     
     Returns:
@@ -69,8 +72,16 @@ def notificar(tipo, mensaje, equipo=None, repuesto=None, plan=None,
             destinatarios += list(User.objects.filter(
                 rol_principal='TECNICO', is_active=True
             ))
+        if notificar_almacen:
+            destinatarios += list(User.objects.filter(
+                rol_principal='ALMACEN', is_active=True
+            ))
+        if notificar_owner:
+            destinatarios += list(User.objects.filter(
+                rol_principal='OWNER', is_active=True
+            ))
         if destinatarios:
-            alerta.destinatarios.set(destinatarios)
+            alerta.destinatarios.set(list(set(destinatarios)))
     
     return alerta
 

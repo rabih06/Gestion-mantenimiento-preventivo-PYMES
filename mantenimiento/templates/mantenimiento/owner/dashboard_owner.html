@@ -1,0 +1,270 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Panel Ejecutivo - Dueño{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1><i class="bi bi-speedometer2 text-primary"></i> Panel Ejecutivo del Dueño</h1>
+        <p class="text-muted mb-0">Visión global de costos, proveedores, compras y estado operativo de la empresa</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mantenimiento:crear_pedido_proveedor' %}" class="btn btn-primary">
+            <i class="bi bi-cart-plus"></i> Nuevo Pedido a Proveedor
+        </a>
+        <a href="{% url 'mantenimiento:lista_proveedores' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-truck"></i> Ver Proveedores
+        </a>
+    </div>
+</div>
+
+<div class="alert alert-dark d-flex align-items-center justify-content-between">
+    <div>
+        <i class="bi bi-person-badge-fill me-2 text-warning"></i>
+        Bienvenido, <strong>{{ user.get_full_name|default:user.username }}</strong> (Owner / Dueño).
+        Supervisas las compras a proveedores, costos de mantenimiento y activos industriales de la empresa.
+    </div>
+    <span class="badge bg-primary">Modo Gerencial</span>
+</div>
+
+<!-- ============================================== -->
+<!-- KPIs FINANCIEROS Y DE INVENTARIO                -->
+<!-- ============================================== -->
+<div class="row mb-4 g-3">
+    <!-- Gasto Total en Mantenimiento -->
+    <div class="col-md-3">
+        <div class="card border-start border-danger border-4 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted text-uppercase mb-1">Costo Total OTs</h6>
+                        <h2 class="mb-0 text-dark">${{ total_gasto_mantenimiento|floatformat:2 }}</h2>
+                        <small class="text-danger">Gastado en reparaciones</small>
+                    </div>
+                    <i class="bi bi-currency-dollar text-danger" style="font-size: 2.3rem;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Valorización de Repuestos -->
+    <div class="col-md-3">
+        <a href="{% url 'mantenimiento:lista_repuestos' %}" class="text-decoration-none">
+            <div class="card border-start border-success border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Capital en Almacén</h6>
+                            <h2 class="mb-0 text-success">${{ valor_inventario|floatformat:2 }}</h2>
+                            <small class="text-success">En repuestos y piezas <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-boxes text-success" style="font-size: 2.3rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Pedidos a Proveedores Activos -->
+    <div class="col-md-3">
+        <a href="{% url 'mantenimiento:lista_pedidos_proveedor' %}" class="text-decoration-none">
+            <div class="card border-start border-warning border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Pedidos en Curso</h6>
+                            <h2 class="mb-0 text-dark">{{ pedidos_pendientes }}</h2>
+                            <small class="text-warning">${{ gasto_pedidos_activos|floatformat:2 }} en tránsito <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-cart-check text-warning" style="font-size: 2.3rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Disponibilidad de Maquinaria -->
+    <div class="col-md-3">
+        <a href="{% url 'mantenimiento:lista_equipos' %}" class="text-decoration-none">
+            <div class="card border-start border-info border-4 shadow-sm h-100 card-hover">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted text-uppercase mb-1">Disponibilidad Flota</h6>
+                            <h2 class="mb-0 text-info">{{ porcentaje_disponibilidad }}%</h2>
+                            <small class="text-muted">{{ equipos_activos }} de {{ total_equipos }} operativos <i class="bi bi-arrow-right"></i></small>
+                        </div>
+                        <i class="bi bi-cpu text-info" style="font-size: 2.3rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- PEDIDOS A PROVEEDORES (COMPRAS)               -->
+<!-- ============================================== -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h5 class="mb-0">
+            <i class="bi bi-cart-check text-primary me-2"></i>
+            Órdenes de Compra y Pedidos a Proveedores Recientes
+        </h5>
+        <div class="d-flex gap-2">
+            <a href="{% url 'mantenimiento:lista_pedidos_proveedor' %}" class="btn btn-sm btn-outline-primary">
+                Ver Todos los Pedidos
+            </a>
+            <a href="{% url 'mantenimiento:crear_pedido_proveedor' %}" class="btn btn-sm btn-primary">
+                <i class="bi bi-plus-circle"></i> Nuevo Pedido
+            </a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th># Pedido</th>
+                    <th>Proveedor</th>
+                    <th>Ítem / Repuesto</th>
+                    <th>Cantidad</th>
+                    <th>Precio Est.</th>
+                    <th>Costo Total</th>
+                    <th>Estado</th>
+                    <th>Fecha Pedido</th>
+                    <th class="text-end">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ped in ultimos_pedidos %}
+                    <tr>
+                        <td>
+                            <strong>
+                                <a href="{% url 'mantenimiento:detalle_pedido_proveedor' ped.id %}">
+                                    #{{ ped.id }}
+                                </a>
+                            </strong>
+                        </td>
+                        <td>
+                            <strong>{{ ped.proveedor.nombre }}</strong>
+                            <br>
+                            <small class="text-muted">{{ ped.proveedor.telefono|default:"" }}</small>
+                        </td>
+                        <td>
+                            {{ ped.descripcion_item }}
+                            {% if ped.repuesto %}
+                                <br><small class="badge bg-light text-dark border">Enlaza con SKU: {{ ped.repuesto.codigo_sku }}</small>
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ ped.cantidad }}</strong></td>
+                        <td>${{ ped.precio_unitario_estimado }}</td>
+                        <td><strong class="text-success">${{ ped.costo_total|floatformat:2 }}</strong></td>
+                        <td>
+                            <span class="badge bg-{% if ped.estado == 'RECIBIDO' %}success{% elif ped.estado == 'ENVIADO' %}primary{% elif ped.estado == 'CANCELADO' %}danger{% else %}warning text-dark{% endif %}">
+                                {{ ped.get_estado_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <small class="text-muted">{{ ped.fecha_pedido|date:"d/m/Y H:i" }}</small>
+                        </td>
+                        <td class="text-end">
+                            <a href="{% url 'mantenimiento:detalle_pedido_proveedor' ped.id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> Detalle
+                            </a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-5">
+                            <i class="bi bi-cart-x text-muted" style="font-size: 2.5rem;"></i>
+                            <p class="mt-2 mb-0">Aún no se han registrado pedidos a proveedores.</p>
+                            <a href="{% url 'mantenimiento:crear_pedido_proveedor' %}" class="btn btn-sm btn-primary mt-2">
+                                <i class="bi bi-cart-plus"></i> Crear Primer Pedido
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- FILA INFERIOR: PROVEEDORES Y FLOTA             -->
+<!-- ============================================== -->
+<div class="row g-4">
+    <!-- Proveedores Registrados -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-truck text-primary me-2"></i> Directorio de Proveedores</h5>
+                <a href="{% url 'mantenimiento:lista_proveedores' %}" class="btn btn-sm btn-outline-primary">
+                    Gestionar ({{ total_proveedores }})
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="row text-center mb-3">
+                    <div class="col-6">
+                        <div class="p-3 border rounded bg-light">
+                            <h4 class="mb-0 text-success">{{ proveedores_activos }}</h4>
+                            <small class="text-muted">Proveedores Activos</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 border rounded bg-light">
+                            <h4 class="mb-0 text-primary">{{ pedidos_pendientes }}</h4>
+                            <small class="text-muted">Pedidos en Proceso</small>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-muted small">
+                    Como Dueño, tienes el control de las alianzas comerciales con los proveedores, precios pactados y compras directas de reposición.
+                </p>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'mantenimiento:crear_proveedor' %}" class="btn btn-sm btn-outline-success">
+                        <i class="bi bi-plus-lg"></i> Registrar Nuevo Proveedor
+                    </a>
+                    <a href="{% url 'mantenimiento:lista_pedidos_proveedor' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-card-checklist"></i> Historial de Compras
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estado de los Activos / Maquinaria -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-cpu text-info me-2"></i> Estado de Equipos y Maquinaria</h5>
+                <a href="{% url 'mantenimiento:lista_equipos' %}" class="btn btn-sm btn-outline-info">
+                    Ver Equipos
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Equipos Operativos (Activos):</span>
+                    <strong class="text-success">{{ equipos_activos }}</strong>
+                </div>
+                <div class="progress mb-3" style="height: 10px;">
+                    <div class="progress-bar bg-success" style="width: {{ porcentaje_disponibilidad }}%;"></div>
+                </div>
+
+                <div class="d-flex justify-content-between mb-2">
+                    <span>En Mantenimiento Preventivo / Correctivo:</span>
+                    <strong class="text-warning">{{ equipos_mantenimiento }}</strong>
+                </div>
+
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Fuera de Servicio o Dados de Baja:</span>
+                    <strong class="text-danger">{{ equipos_fuera }}</strong>
+                </div>
+
+                <div class="alert alert-light border small mb-0">
+                    <i class="bi bi-info-circle text-primary me-1"></i>
+                    El Administrador de Mantenimiento gestiona las reparaciones y planes preventivos para maximizar esta disponibilidad.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-9 col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white py-3">
+                <h4 class="mb-0"><i class="bi bi-cart-plus"></i> {{ titulo }}</h4>
+            </div>
+            <div class="card-body p-4">
+                <div class="alert alert-light border mb-4">
+                    <i class="bi bi-info-circle text-primary me-2"></i>
+                    Esta orden de compra es emitida por el Dueño (Owner) para reabastecer repuestos o adquirir insumos con proveedores autorizados.
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    <div class="row g-3">
+                        <!-- Proveedor -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">{{ form.proveedor.label }}</label>
+                            {{ form.proveedor }}
+                            {% if form.proveedor.help_text %}
+                                <div class="form-text">{{ form.proveedor.help_text }}</div>
+                            {% endif %}
+                            {% if form.proveedor.errors %}
+                                <div class="text-danger small">{{ form.proveedor.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Repuesto vinculado (opcional) -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">{{ form.repuesto.label }}</label>
+                            {{ form.repuesto }}
+                            {% if form.repuesto.help_text %}
+                                <div class="form-text">{{ form.repuesto.help_text }}</div>
+                            {% endif %}
+                            {% if form.repuesto.errors %}
+                                <div class="text-danger small">{{ form.repuesto.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Descripción del ítem -->
+                        <div class="col-12">
+                            <label class="form-label fw-bold">{{ form.descripcion_item.label }}</label>
+                            {{ form.descripcion_item }}
+                            {% if form.descripcion_item.help_text %}
+                                <div class="form-text">{{ form.descripcion_item.help_text }}</div>
+                            {% endif %}
+                            {% if form.descripcion_item.errors %}
+                                <div class="text-danger small">{{ form.descripcion_item.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Cantidad -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">{{ form.cantidad.label }}</label>
+                            {{ form.cantidad }}
+                            {% if form.cantidad.errors %}
+                                <div class="text-danger small">{{ form.cantidad.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Precio unitario estimado -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">{{ form.precio_unitario_estimado.label }}</label>
+                            {{ form.precio_unitario_estimado }}
+                            {% if form.precio_unitario_estimado.errors %}
+                                <div class="text-danger small">{{ form.precio_unitario_estimado.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Observaciones -->
+                        <div class="col-12">
+                            <label class="form-label fw-bold">{{ form.observaciones.label }}</label>
+                            {{ form.observaciones }}
+                            {% if form.observaciones.errors %}
+                                <div class="text-danger small">{{ form.observaciones.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'mantenimiento:lista_pedidos_proveedor' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Registrar Pedido
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

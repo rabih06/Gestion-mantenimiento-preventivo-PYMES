@@ -28,6 +28,8 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -141,3 +143,20 @@ MAILERS = {
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/redirigir/'
 LOGOUT_REDIRECT_URL = '/login/'
+
+# =====================================================
+# COOKIES PARA MÓVIL (Safari es muy estricto)
+# =====================================================
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False   # ← False porque NO usamos HTTPS
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_AGE = 86400      # 24 horas
+
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = False      # ← False porque NO usamos HTTPS
+CSRF_COOKIE_HTTPONLY = False    # Django necesita leerlo desde JS (opcional)
+
+# Si sigues con problemas en Safari, prueba con 'None':
+# SESSION_COOKIE_SAMESITE = 'None'
+# CSRF_COOKIE_SAMESITE = 'None'
+# ⚠️ Con SameSite=None, Django requiere Secure=True → solo funciona con HTTPS

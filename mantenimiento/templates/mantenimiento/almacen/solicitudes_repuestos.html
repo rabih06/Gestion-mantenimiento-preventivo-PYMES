@@ -1,0 +1,256 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Solicitudes de Repuestos - Almacén{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1><i class="bi bi-box-arrow-up-right"></i> Solicitudes de Repuestos para Órdenes</h1>
+        <p class="text-muted mb-0">Gestión de salida y despacho de materiales ordenados por los técnicos</p>
+    </div>
+    <div>
+        <a href="{% url 'mantenimiento:dashboard_almacen' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver a Panel Almacén
+        </a>
+    </div>
+</div>
+
+<!-- Resumen Rápido -->
+<div class="row mb-4 g-3">
+    <div class="col-md-4">
+        <a href="?estado=PENDIENTE" class="text-decoration-none">
+            <div class="card border-start border-warning border-4 shadow-sm {% if estado_filtro == 'PENDIENTE' %}bg-warning-subtle{% endif %}">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase mb-1">Pendientes de Salida</h6>
+                    <h3 class="mb-0 text-dark">{{ total_pendientes }}</h3>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="?estado=DESPACHADO" class="text-decoration-none">
+            <div class="card border-start border-success border-4 shadow-sm {% if estado_filtro == 'DESPACHADO' %}bg-success-subtle{% endif %}">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase mb-1">Despachadas / Entregadas</h6>
+                    <h3 class="mb-0 text-success">{{ total_despachadas }}</h3>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="?estado=RECHAZADO" class="text-decoration-none">
+            <div class="card border-start border-danger border-4 shadow-sm {% if estado_filtro == 'RECHAZADO' %}bg-danger-subtle{% endif %}">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase mb-1">Rechazadas</h6>
+                    <h3 class="mb-0 text-danger">{{ total_rechazadas }}</h3>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-5">
+                <label class="form-label">Buscar</label>
+                <input type="text" name="q" class="form-control"
+                       placeholder="Repuesto, SKU, N° OT, Equipo..." value="{{ q }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Estado de Salida</label>
+                <select name="estado" class="form-select">
+                    <option value="TODOS" {% if estado_filtro == 'TODOS' %}selected{% endif %}>Todos los estados</option>
+                    <option value="PENDIENTE" {% if estado_filtro == 'PENDIENTE' %}selected{% endif %}>Pendiente de Salida</option>
+                    <option value="DESPACHADO" {% if estado_filtro == 'DESPACHADO' %}selected{% endif %}>Despachado / Entregado</option>
+                    <option value="RECHAZADO" {% if estado_filtro == 'RECHAZADO' %}selected{% endif %}>Rechazado</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-fill">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+                <a href="{% url 'mantenimiento:solicitudes_repuestos_almacen' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabla de Solicitudes -->
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>OT / Equipo</th>
+                    <th>Repuesto Requerido</th>
+                    <th>Cantidad</th>
+                    <th>Estado</th>
+                    <th>Solicitado Por</th>
+                    <th>Stock Actual</th>
+                    <th>Despachado Por</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sol in page_obj %}
+                    <tr class="{% if sol.estado == 'PENDIENTE' %}table-warning-subtle{% endif %}">
+                        <td>
+                            <strong>
+                                <a href="{% url 'mantenimiento:detalle_orden' sol.orden.id %}">
+                                    OT #{{ sol.orden.id }}
+                                </a>
+                            </strong>
+                            <br>
+                            <small class="text-muted">{{ sol.orden.equipo.codigo_interno }}</small>
+                            <span class="badge bg-{% if sol.orden.prioridad == 'CRITICA' %}danger{% elif sol.orden.prioridad == 'ALTA' %}warning{% else %}secondary{% endif %}">
+                                {{ sol.orden.get_prioridad_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <strong>{{ sol.repuesto.nombre }}</strong>
+                            <br>
+                            <code class="small">{{ sol.repuesto.codigo_sku }}</code>
+                            {% if sol.repuesto.ubicacion_almacen %}
+                                <span class="badge bg-light text-dark border ms-1"><i class="bi bi-geo-alt"></i> {{ sol.repuesto.ubicacion_almacen }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong class="fs-6">{{ sol.cantidad_utilizada }}</strong> {{ sol.repuesto.unidad_medida }}
+                        </td>
+                        <td>
+                            {% if sol.estado == 'DESPACHADO' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> Despachado
+                                </span>
+                            {% elif sol.estado == 'RECHAZADO' %}
+                                <span class="badge bg-danger" title="{{ sol.motivo_rechazo }}">
+                                    <i class="bi bi-x-circle"></i> Rechazado
+                                </span>
+                                {% if sol.motivo_rechazo %}
+                                    <div class="small text-danger mt-1">{{ sol.motivo_rechazo|truncatechars:35 }}</div>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-clock"></i> Pendiente
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if sol.solicitado_por %}
+                                {{ sol.solicitado_por.get_full_name|default:sol.solicitado_por.username }}
+                            {% elif sol.orden.tecnico %}
+                                {{ sol.orden.tecnico.get_full_name|default:sol.orden.tecnico.username }}
+                            {% else %}
+                                <span class="text-muted">Técnico</span>
+                            {% endif %}
+                            <br>
+                            <small class="text-muted">{{ sol.created_at|date:"d/m/Y H:i" }}</small>
+                        </td>
+                        <td>
+                            {% if sol.repuesto.cantidad_actual >= sol.cantidad_utilizada %}
+                                <span class="text-success fw-bold">{{ sol.repuesto.cantidad_actual }}</span>
+                            {% else %}
+                                <span class="text-danger fw-bold">{{ sol.repuesto.cantidad_actual }} (Bajo)</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if sol.despachado_por %}
+                                {{ sol.despachado_por.get_full_name|default:sol.despachado_por.username }}
+                                <br>
+                                <small class="text-muted">{{ sol.fecha_despacho|date:"d/m/Y H:i" }}</small>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if sol.estado == 'PENDIENTE' %}
+                                <div class="d-inline-flex gap-1">
+                                    {% if sol.repuesto.cantidad_actual >= sol.cantidad_utilizada %}
+                                        <form method="post" action="{% url 'mantenimiento:dar_salida_repuesto' sol.id %}">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-success" title="Dar salida y descontar de inventario">
+                                                <i class="bi bi-box-arrow-up-right"></i> Salida
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <a href="{% url 'mantenimiento:ingreso_repuesto' sol.repuesto.id %}" class="btn btn-sm btn-outline-danger" title="Ingresar stock antes de despachar">
+                                            Reponer
+                                        </a>
+                                    {% endif %}
+
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalRechazo{{ sol.id }}" title="Rechazar solicitud">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+
+                                <!-- Modal Rechazo -->
+                                <div class="modal fade text-start" id="modalRechazo{{ sol.id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <form method="post" action="{% url 'mantenimiento:rechazar_repuesto' sol.id %}">
+                                                {% csrf_token %}
+                                                <div class="modal-header bg-danger text-white">
+                                                    <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Rechazar Solicitud #{{ sol.id }}</h5>
+                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Indica el motivo por el cual no se dará salida a <strong>{{ sol.cantidad_utilizada }}x {{ sol.repuesto.nombre }}</strong> para la orden OT #{{ sol.orden.id }}:</p>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Motivo del rechazo *</label>
+                                                        <textarea name="motivo_rechazo" class="form-control" rows="3" required placeholder="Ej: No disponible en almacén, orden cancelada..."></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                    <button type="submit" class="btn btn-danger">Confirmar Rechazo</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <a href="{% url 'mantenimiento:detalle_orden' sol.orden.id %}" class="btn btn-sm btn-outline-primary" title="Ver orden">
+                                    <i class="bi bi-eye"></i> OT
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-5">
+                            <i class="bi bi-inbox" style="font-size: 2.5rem;"></i>
+                            <p class="mt-2 mb-0">No hay solicitudes que coincidan con los filtros aplicados.</p>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación -->
+    {% if page_obj.has_other_pages %}
+        <div class="card-footer bg-white">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&estado={{ estado_filtro }}&q={{ q }}">Anterior</a>
+                        </li>
+                    {% endif %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&estado={{ estado_filtro }}&q={{ q }}">Siguiente</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

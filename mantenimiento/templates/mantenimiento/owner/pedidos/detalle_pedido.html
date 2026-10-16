@@ -1,0 +1,161 @@
+{% extends 'mantenimiento/base.html' %}
+{% block title %}Pedido #{{ pedido.id }} - {{ pedido.proveedor.nombre }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1><i class="bi bi-cart-check"></i> Orden de Compra #{{ pedido.id }}</h1>
+        <p class="text-muted mb-0">
+            Proveedor: <strong>{{ pedido.proveedor.nombre }}</strong>
+            <span class="badge bg-{% if pedido.estado == 'RECIBIDO' %}success{% elif pedido.estado == 'ENVIADO' %}primary{% elif pedido.estado == 'CANCELADO' %}danger{% else %}warning text-dark{% endif %} ms-2">
+                {{ pedido.get_estado_display }}
+            </span>
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mantenimiento:lista_pedidos_proveedor' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver a Pedidos
+        </a>
+
+        {% if pedido.estado == 'PENDIENTE' and user.rol_principal in 'OWNER ADMIN' %}
+            <a href="{% url 'mantenimiento:cambiar_estado_pedido_proveedor' pedido.id 'ENVIADO' %}" class="btn btn-primary">
+                <i class="bi bi-send"></i> Marcar como Enviado
+            </a>
+        {% endif %}
+
+        {% if pedido.estado == 'ENVIADO' and user.rol_principal in 'OWNER ADMIN ALMACEN' %}
+            <a href="{% url 'mantenimiento:cambiar_estado_pedido_proveedor' pedido.id 'RECIBIDO' %}" class="btn btn-success">
+                <i class="bi bi-check2-circle"></i> Recibir e Ingresar a Almacén
+            </a>
+        {% endif %}
+
+        {% if pedido.estado in 'PENDIENTE ENVIADO' and user.rol_principal in 'OWNER ADMIN' %}
+            <a href="{% url 'mantenimiento:cambiar_estado_pedido_proveedor' pedido.id 'CANCELADO' %}" class="btn btn-outline-danger" onclick="return confirm('¿Seguro que deseas cancelar este pedido?');">
+                <i class="bi bi-x-circle"></i> Cancelar Pedido
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+{% if pedido.estado == 'RECIBIDO' %}
+<div class="alert alert-success d-flex align-items-center">
+    <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+    <div>
+        <strong>Pedido Recibido:</strong> La mercancía fue ingresada exitosamente al inventario de almacén el {{ pedido.fecha_recepcion|date:"d/m/Y H:i" }}.
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-4">
+    <!-- Columna Izquierda: Información del Ítem / Pedido -->
+    <div class="col-md-7">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-box-seam text-primary me-2"></i> Detalle de la Mercancía Solicitada</h5>
+            </div>
+            <div class="card-body">
+                <h4 class="text-dark mb-2">{{ pedido.descripcion_item }}</h4>
+                {% if pedido.repuesto %}
+                    <div class="alert alert-light border d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <strong>Repuesto del Catálogo:</strong> {{ pedido.repuesto.nombre }}<br>
+                            <code>SKU: {{ pedido.repuesto.codigo_sku }}</code> | Stock actual en almacén: <strong>{{ pedido.repuesto.cantidad_actual }}</strong>
+                        </div>
+                        <a href="{% url 'mantenimiento:detalle_repuesto' pedido.repuesto.id %}" class="btn btn-sm btn-outline-primary">
+                            Ver Repuesto
+                        </a>
+                    </div>
+                {% endif %}
+
+                <div class="row g-3 text-center my-2">
+                    <div class="col-4">
+                        <div class="p-3 border rounded bg-light">
+                            <span class="text-muted d-block small">Cantidad</span>
+                            <strong class="fs-4">{{ pedido.cantidad }}</strong>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-3 border rounded bg-light">
+                            <span class="text-muted d-block small">Precio Unitario</span>
+                            <strong class="fs-4">${{ pedido.precio_unitario_estimado }}</strong>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-3 border rounded bg-light">
+                            <span class="text-muted d-block small">Costo Total</span>
+                            <strong class="fs-4 text-success">${{ pedido.costo_total|floatformat:2 }}</strong>
+                        </div>
+                    </div>
+                </div>
+
+                {% if pedido.observaciones %}
+                    <h6 class="mt-4 mb-2"><i class="bi bi-card-text"></i> Observaciones y Términos:</h6>
+                    <p class="text-muted mb-0 p-3 bg-light rounded" style="white-space: pre-line;">{{ pedido.observaciones }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Columna Derecha: Información del Proveedor y Trazabilidad -->
+    <div class="col-md-5">
+        <!-- Proveedor -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-truck me-2"></i> Información del Proveedor</h5>
+                <a href="{% url 'mantenimiento:detalle_proveedor' pedido.proveedor.id %}" class="btn btn-sm btn-light">
+                    Ficha
+                </a>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Empresa</span>
+                    <strong>{{ pedido.proveedor.nombre }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Contacto</span>
+                    <strong>{{ pedido.proveedor.contacto|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Teléfono</span>
+                    <strong>{{ pedido.proveedor.telefono|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Email</span>
+                    <strong>{{ pedido.proveedor.email|default:"-" }}</strong>
+                </li>
+                <li class="list-group-item">
+                    <span class="text-muted d-block small">Dirección</span>
+                    <small>{{ pedido.proveedor.direccion|default:"-" }}</small>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Trazabilidad del Pedido -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i> Trazabilidad</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Emitido por</span>
+                    <strong>
+                        {% if pedido.creado_por %}
+                            {{ pedido.creado_por.get_full_name|default:pedido.creado_por.username }}
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Fecha de emisión</span>
+                    <strong>{{ pedido.fecha_pedido|date:"d/m/Y H:i" }}</strong>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Fecha de recepción</span>
+                    <strong>{{ pedido.fecha_recepcion|date:"d/m/Y H:i"|default:"Pendiente" }}</strong>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
